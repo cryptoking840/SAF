@@ -10,15 +10,32 @@ export default function InspectionQueue() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchBatches = async () => {
-    const res = await fetch(
-      "http://localhost:5000/api/saf/status?status=SUBMITTED"
-    );
-    const data = await res.json();
-    setBatches(data);
+    try {
+      const res = await fetch(
+        "http://localhost:5000/api/saf/status?status=SUBMITTED"
+      );
+      if (!res.ok) {
+        throw new Error(`Failed to fetch queue: ${res.status}`);
+      }
+
+      const data = await res.json();
+      setBatches(data);
+    } catch (err) {
+      console.error("Failed to load inspection queue:", err);
+    }
   };
 
   useEffect(() => {
-    fetchBatches();
+    fetch("http://localhost:5000/api/saf/status?status=SUBMITTED")
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`Failed to fetch queue: ${res.status}`);
+        }
+
+        return res.json();
+      })
+      .then((data) => setBatches(data))
+      .catch((err) => console.error("Failed to load inspection queue:", err));
   }, []);
 
   const openModal = (batch) => {
@@ -32,25 +49,51 @@ export default function InspectionQueue() {
   };
 
   const approveBatch = async () => {
-    await fetch("http://localhost:5000/api/saf/inspect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: selectedBatch._id })
-    });
+    if (!selectedBatch?._id) {
+      return;
+    }
 
-    closeModal();
-    fetchBatches();
+    try {
+      const res = await fetch("http://localhost:5000/api/saf/inspect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedBatch._id })
+      });
+
+      if (!res.ok) {
+        throw new Error(`Approval failed: ${res.status}`);
+      }
+
+      closeModal();
+      await fetchBatches();
+    } catch (err) {
+      console.error("Failed to approve batch:", err);
+      alert("Failed to approve batch. Please try again.");
+    }
   };
 
   const rejectBatch = async () => {
-    await fetch("http://localhost:5000/api/saf/reject", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: selectedBatch._id })
-    });
+    if (!selectedBatch?._id) {
+      return;
+    }
 
-    closeModal();
-    fetchBatches();
+    try {
+      const res = await fetch("http://localhost:5000/api/saf/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedBatch._id })
+      });
+
+      if (!res.ok) {
+        throw new Error(`Rejection failed: ${res.status}`);
+      }
+
+      closeModal();
+      await fetchBatches();
+    } catch (err) {
+      console.error("Failed to reject batch:", err);
+      alert("Failed to reject batch. Please try again.");
+    }
   };
 
   return (

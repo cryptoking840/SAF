@@ -21,7 +21,10 @@ export default function BatchApprovals() {
   };
 
   useEffect(() => {
-    fetchBatches();
+    fetch("http://localhost:5000/api/saf/status?status=INSPECTED")
+      .then((res) => res.json())
+      .then((data) => setBatches(data))
+      .catch((err) => console.error("Fetch error:", err));
   }, []);
 
   const openModal = (batch) => {

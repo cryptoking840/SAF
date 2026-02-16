@@ -1,11 +1,13 @@
 import { useState } from "react";
 
-export default function RegistryBatchDetails({ batch, onClose }) {
+export default function BatchDetails({ batch, onClose, onApprove, onReject }) {
   const [loading, setLoading] = useState(false);
   const [txHash, setTxHash] = useState(batch.txHash || null);
   const [certificateId, setCertificateId] = useState(batch.certificateId || null);
   const [status, setStatus] = useState(batch.status);
   const [lastUpdated, setLastUpdated] = useState(batch.updatedAt);
+
+  const isInspectorReview = typeof onApprove === "function" || typeof onReject === "function";
 
   const approveAndRegister = async () => {
     try {
@@ -36,6 +38,38 @@ export default function RegistryBatchDetails({ batch, onClose }) {
     }
   };
 
+  const handleInspectorApprove = async () => {
+    if (!onApprove) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await onApprove();
+    } catch (err) {
+      console.error("Failed to approve batch:", err);
+      alert("Failed to approve batch. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInspectorReject = async () => {
+    if (!onReject) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await onReject();
+    } catch (err) {
+      console.error("Failed to reject batch:", err);
+      alert("Failed to reject batch. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl p-8 w-[700px]">
 
@@ -46,7 +80,7 @@ export default function RegistryBatchDetails({ batch, onClose }) {
             {batch.productionBatchId}
           </h2>
           <p className="text-sm text-gray-500">
-            Registry Review
+            {isInspectorReview ? "Inspector Review" : "Registry Review"}
           </p>
         </div>
 
@@ -121,7 +155,32 @@ export default function RegistryBatchDetails({ batch, onClose }) {
       </div>
 
       {/* Action Button */}
-      {status === "INSPECTED" && (
+      {isInspectorReview ? (
+        <div className="flex justify-end gap-3 mt-10">
+          <button
+            onClick={handleInspectorReject}
+            disabled={loading}
+            className={`px-6 py-3 rounded-lg font-bold text-white ${
+              loading
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-red-600 hover:bg-red-700"
+            }`}
+          >
+            Reject Batch
+          </button>
+          <button
+            onClick={handleInspectorApprove}
+            disabled={loading}
+            className={`px-6 py-3 rounded-lg font-bold text-white ${
+              loading
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-primary hover:opacity-90"
+            }`}
+          >
+            Approve Batch
+          </button>
+        </div>
+      ) : status === "INSPECTED" && (
         <div className="flex justify-end mt-10">
           <button
             onClick={approveAndRegister}
