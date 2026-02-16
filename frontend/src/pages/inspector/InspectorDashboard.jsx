@@ -1,6 +1,108 @@
+import { useEffect, useMemo, useState } from "react";
 import InspectorLayout from "../../layout/InspectorLayout";
 
+const WEEKLY_GOAL = 60;
+
 export default function InspectorDashboard() {
+  const [batches, setBatches] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchDashboardData = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/saf");
+        if (!res.ok) {
+          throw new Error(`Failed to fetch inspector data: ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (isMounted) {
+          setBatches(Array.isArray(data) ? data : []);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err.message || "Unable to load inspector overview.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchDashboardData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const metrics = useMemo(() => {
+    const totalVerified = batches.filter(
+      (batch) => batch.status === "INSPECTED" || batch.status === "APPROVED"
+    ).length;
+
+    const pendingReview = batches.filter((batch) => batch.status === "SUBMITTED").length;
+
+    const completedBatches = batches.filter(
+      (batch) => batch.status !== "SUBMITTED" && batch.createdAt && batch.updatedAt
+    );
+
+    const averageVerificationHours = completedBatches.length
+      ? completedBatches.reduce((total, batch) => {
+          const createdAt = new Date(batch.createdAt).getTime();
+          const updatedAt = new Date(batch.updatedAt).getTime();
+          return total + Math.max((updatedAt - createdAt) / 3_600_000, 0);
+        }, 0) / completedBatches.length
+      : 0;
+
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const verifiedThisWeek = batches.filter(
+      (batch) =>
+        (batch.status === "INSPECTED" || batch.status === "APPROVED") &&
+        new Date(batch.updatedAt || batch.createdAt).getTime() >= oneWeekAgo
+    ).length;
+
+    const recentActivity = [...batches]
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt).getTime() -
+          new Date(a.updatedAt || a.createdAt).getTime()
+      )
+      .slice(0, 6)
+      .map((batch) => ({
+        id: batch.productionBatchId || batch._id,
+        fuel: batch.feedstockType || "Unknown",
+        time: formatTimestamp(batch.updatedAt || batch.createdAt),
+        status: batch.status || "UNKNOWN",
+      }));
+
+    const feedstockCount = batches.reduce((acc, batch) => {
+      const key = batch.feedstockType || "Unknown";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const topFeedstocks = Object.entries(feedstockCount)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 2);
+
+    return {
+      totalVerified,
+      pendingReview,
+      averageVerificationHours,
+      verifiedThisWeek,
+      recentActivity,
+      topFeedstocks,
+    };
+  }, [batches]);
+
+  const weeklyPercent = Math.min((metrics.verifiedThisWeek / WEEKLY_GOAL) * 100, 100);
+  const progressOffset = 364.4 - (weeklyPercent / 100) * 364.4;
+
   return (
     <InspectorLayout active="overview">
 
@@ -11,38 +113,45 @@ export default function InspectorDashboard() {
             Inspector Overview
           </h2>
           <p className="text-gray-500 text-sm">
-            Welcome back. Here’s your verification summary.
+            Real-time verification summary from submitted and inspected SAF batches.
           </p>
         </div>
 
         <button className="bg-primary hover:bg-primary/80 text-background-dark px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition">
           <span className="material-symbols-outlined text-[20px]">
-            add_circle
+            refresh
           </span>
-          New Audit
+          Live Data
         </button>
       </div>
+
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* KPI SECTION */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <KpiCard
           title="Total Verified Batches"
-          value="1,284"
-          trend="+12.5%"
+          value={isLoading ? "..." : metrics.totalVerified.toLocaleString()}
+          trend={isLoading ? "Loading" : `${batches.length} total`}
           icon="verified"
         />
         <KpiCard
           title="Avg. Verification Time"
-          value="4.2h"
-          trend="-0.8%"
+          value={isLoading ? "..." : `${metrics.averageVerificationHours.toFixed(1)}h`}
+          trend="Completed only"
           icon="timer"
-          negative
         />
         <KpiCard
           title="Pending Review"
-          value="12"
+          value={isLoading ? "..." : `${metrics.pendingReview}`}
           highlight
           icon="priority_high"
+          trend={metrics.pendingReview > 0 ? "Needs action" : "Clear"}
+          negative={metrics.pendingReview > 0}
         />
       </div>
 
@@ -56,7 +165,7 @@ export default function InspectorDashboard() {
               Recent Verification Activity
             </h4>
             <button className="text-primary text-xs font-bold hover:underline">
-              View All
+              Last {metrics.recentActivity.length}
             </button>
           </div>
 
@@ -72,27 +181,23 @@ export default function InspectorDashboard() {
               </thead>
 
               <tbody className="divide-y">
-                <ActivityRow
-                  id="SAF-78291"
-                  fuel="Bio-Kerosene"
-                  time="Oct 24, 09:45 AM"
-                  status="APPROVED"
-                  type="approved"
-                />
-                <ActivityRow
-                  id="SAF-78285"
-                  fuel="HVO Fuel"
-                  time="Oct 23, 04:20 PM"
-                  status="PENDING"
-                  type="pending"
-                />
-                <ActivityRow
-                  id="SAF-78282"
-                  fuel="HEFA Fuel"
-                  time="Oct 23, 11:15 AM"
-                  status="FLAGGED"
-                  type="flagged"
-                />
+                {metrics.recentActivity.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-4 text-sm text-gray-500">
+                      {isLoading ? "Loading recent activity..." : "No activity found."}
+                    </td>
+                  </tr>
+                ) : (
+                  metrics.recentActivity.map((activity) => (
+                    <ActivityRow
+                      key={activity.id}
+                      id={activity.id}
+                      fuel={activity.fuel}
+                      time={activity.time}
+                      status={activity.status}
+                    />
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -107,7 +212,7 @@ export default function InspectorDashboard() {
               Weekly Verification Goal
             </h4>
             <p className="text-primary text-xs mb-6">
-              45 of 60 Batches Verified
+              {metrics.verifiedThisWeek} of {WEEKLY_GOAL} Batches Verified
             </p>
 
             <div className="relative flex justify-center items-center mb-6">
@@ -128,11 +233,11 @@ export default function InspectorDashboard() {
                   stroke="#13ec80"
                   strokeWidth="8"
                   strokeDasharray="364.4"
-                  strokeDashoffset="91.1"
+                  strokeDashoffset={progressOffset}
                 />
               </svg>
               <div className="absolute text-2xl font-bold">
-                75%
+                {Math.round(weeklyPercent)}%
               </div>
             </div>
 
@@ -148,13 +253,21 @@ export default function InspectorDashboard() {
             </h4>
 
             <Insight
-              title="HVO Output Spike"
-              desc="30% more batches than last week"
+              title="Top Feedstock"
+              desc={
+                metrics.topFeedstocks[0]
+                  ? `${metrics.topFeedstocks[0][0]} (${metrics.topFeedstocks[0][1]} batches)`
+                  : "No feedstock data available"
+              }
               color="blue"
             />
             <Insight
-              title="Delayed Feedstock Data"
-              desc="Region: Northern Europe (3 batches)"
+              title="Second Highest Feedstock"
+              desc={
+                metrics.topFeedstocks[1]
+                  ? `${metrics.topFeedstocks[1][0]} (${metrics.topFeedstocks[1][1]} batches)`
+                  : "Not enough data for second ranking"
+              }
               color="orange"
             />
           </div>
@@ -203,11 +316,11 @@ function KpiCard({ title, value, trend, icon, highlight, negative }) {
   );
 }
 
-function ActivityRow({ id, fuel, time, status, type }) {
+function ActivityRow({ id, fuel, time, status }) {
   const statusStyle =
-    type === "approved"
+    status === "APPROVED" || status === "INSPECTED"
       ? "bg-primary/20 text-primary"
-      : type === "pending"
+      : status === "SUBMITTED"
       ? "bg-yellow-100 text-yellow-700"
       : "bg-red-100 text-red-700";
 
@@ -244,4 +357,22 @@ function Insight({ title, desc, color }) {
       </div>
     </div>
   );
+}
+
+function formatTimestamp(value) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
 }

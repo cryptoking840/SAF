@@ -1,10 +1,87 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AppLayout from "../../layout/AppLayout";
 import RegisterSAF from "./RegisterSAF";
 import Modal from "../../components/Modal";
 
+const PRICE_PER_MT = 950;
+
 export default function SupplierDashboard() {
   const [openModal, setOpenModal] = useState(false);
+  const [batches, setBatches] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const fetchBatches = useCallback(async () => {
+    try {
+      setError("");
+      const res = await fetch("http://localhost:5000/api/saf");
+      if (!res.ok) {
+        throw new Error(`Failed to fetch supplier dashboard data: ${res.status}`);
+      }
+
+      const data = await res.json();
+      setBatches(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || "Unable to load supplier dashboard data.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBatches();
+  }, [fetchBatches]);
+
+  const metrics = useMemo(() => {
+    const totalQuantity = batches.reduce((sum, batch) => sum + Number(batch.quantity || 0), 0);
+    const activeRegistrations = batches.filter(
+      (batch) =>
+        batch.status === "SUBMITTED" ||
+        batch.status === "INSPECTED" ||
+        batch.status === "PENDING_BLOCKCHAIN"
+    ).length;
+    const approvedCount = batches.filter((batch) => batch.status === "APPROVED").length;
+    const carbonReduction = totalQuantity * 3;
+
+    const statusMap = {
+      APPROVED: 0,
+      INSPECTED: 0,
+      SUBMITTED: 0,
+      REJECTED: 0,
+    };
+
+    batches.forEach((batch) => {
+      const status = batch.status || "SUBMITTED";
+      if (statusMap[status] !== undefined) {
+        statusMap[status] += 1;
+      }
+    });
+
+    const activity = [...batches]
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt).getTime() -
+          new Date(a.updatedAt || a.createdAt).getTime()
+      )
+      .slice(0, 6)
+      .map((batch) => ({
+        id: batch.productionBatchId || batch._id,
+        time: formatTimestamp(batch.updatedAt || batch.createdAt),
+        activity: getActivityLabel(batch.status),
+        status: batch.status || "UNKNOWN",
+        value: `$${(Number(batch.quantity || 0) * PRICE_PER_MT).toLocaleString()}`,
+      }));
+
+    return {
+      totalQuantity,
+      activeRegistrations,
+      totalRevenue: totalQuantity * PRICE_PER_MT,
+      carbonReduction,
+      approvedCount,
+      statusMap,
+      activity,
+    };
+  }, [batches]);
 
   return (
     <AppLayout>
@@ -21,36 +98,42 @@ export default function SupplierDashboard() {
         </button>
       </div>
 
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       {/* KPI SECTION */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
 
         <KpiCard
           icon="gas_meter"
           title="Total SAF Produced"
-          value="12,450"
+          value={isLoading ? "..." : metrics.totalQuantity.toLocaleString()}
           suffix="MT"
-          trend="+12.5%"
+          trend={`${metrics.approvedCount} approved`}
         />
 
         <KpiCard
           icon="assignment"
           title="Active Registrations"
-          value="18"
+          value={isLoading ? "..." : metrics.activeRegistrations}
           suffix="Batches"
-          trend="+4 new"
+          trend={`${batches.length} total`}
         />
 
         <KpiCard
           icon="payments"
-          title="Total Revenue"
-          value="$2.45M"
-          trend="+8.2%"
+          title="Estimated Revenue"
+          value={isLoading ? "..." : `$${(metrics.totalRevenue / 1_000_000).toFixed(2)}M`}
+          trend="At $950/MT"
         />
 
         <KpiCard
           icon="co2"
           title="CO2 Reduction Impact"
-          value="38,000"
+          value={isLoading ? "..." : metrics.carbonReduction.toLocaleString()}
           suffix="Tons"
           highlight
         />
@@ -59,34 +142,25 @@ export default function SupplierDashboard() {
       {/* CHARTS SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
 
-        {/* Production Chart */}
         <div className="lg:col-span-2 bg-white p-6 rounded-xl border shadow-sm">
           <h3 className="text-lg font-bold mb-6">
             SAF Production vs Market Demand
           </h3>
 
-          <div className="h-[300px] w-full">
-            <svg viewBox="0 0 800 300" className="w-full h-full">
-              <path
-                d="M0 240 Q 100 220, 200 180 T 400 120 T 600 90 T 800 70"
-                fill="none"
-                stroke="#13ec80"
-                strokeWidth="3"
-              />
-            </svg>
+          <div className="h-[300px] w-full flex items-center justify-center text-gray-500 text-sm">
+            {isLoading ? "Loading production trend..." : `Total tracked production: ${metrics.totalQuantity.toLocaleString()} MT`}
           </div>
         </div>
 
-        {/* Status Breakdown */}
         <div className="bg-white p-6 rounded-xl border shadow-sm">
           <h3 className="text-lg font-bold mb-6">
             Batch Status Breakdown
           </h3>
 
-          <StatusRow label="Listed" value={24} color="bg-primary" />
-          <StatusRow label="Verified" value={12} color="bg-blue-400" />
-          <StatusRow label="Pending" value={4} color="bg-amber-400" />
-          <StatusRow label="Draft" value={2} color="bg-gray-300" />
+          <StatusRow label="Approved" value={metrics.statusMap.APPROVED} color="bg-primary" />
+          <StatusRow label="Inspected" value={metrics.statusMap.INSPECTED} color="bg-blue-400" />
+          <StatusRow label="Submitted" value={metrics.statusMap.SUBMITTED} color="bg-amber-400" />
+          <StatusRow label="Rejected" value={metrics.statusMap.REJECTED} color="bg-red-300" />
         </div>
       </div>
 
@@ -114,69 +188,56 @@ export default function SupplierDashboard() {
           </thead>
 
           <tbody className="divide-y">
-            <ActivityRow
-              time="Oct 24, 14:20"
-              id="SAF-0042"
-              activity="Batch Sold"
-              status="COMPLETED"
-              value="$142,500"
-              color="text-green-500"
-            />
-
-            <ActivityRow
-              time="Oct 23, 09:15"
-              id="SAF-0048"
-              activity="New Bid"
-              status="ACTIVE"
-              value="$118,200"
-              color="text-blue-500"
-            />
+            {metrics.activity.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-6 text-sm text-gray-500">
+                  {isLoading ? "Loading activity..." : "No activity found."}
+                </td>
+              </tr>
+            ) : (
+              metrics.activity.map((row) => (
+                <ActivityRow
+                  key={row.id}
+                  time={row.time}
+                  id={row.id}
+                  activity={row.activity}
+                  status={row.status}
+                  value={row.value}
+                  color={row.status === "APPROVED" ? "text-green-500" : "text-blue-500"}
+                />
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* ✅ MODAL FIXED */}
       <Modal
         isOpen={openModal}
         onClose={() => setOpenModal(false)}
       >
-        <RegisterSAF onSuccess={() => setOpenModal(false)} />
+        <RegisterSAF
+          onSuccess={() => {
+            setOpenModal(false);
+            fetchBatches();
+          }}
+        />
       </Modal>
 
     </AppLayout>
   );
 }
 
-/* ================= COMPONENTS ================= */
-
 function KpiCard({ icon, title, value, suffix, trend, highlight }) {
   return (
     <div className="bg-white p-6 rounded-xl border shadow-sm">
       <div className="flex justify-between mb-4">
-        <span className="material-symbols-outlined text-primary">
-          {icon}
-        </span>
-
-        {trend && (
-          <span className="text-xs font-bold text-green-600">
-            {trend}
-          </span>
-        )}
+        <span className="material-symbols-outlined text-primary">{icon}</span>
+        {trend && <span className="text-xs font-bold text-green-600">{trend}</span>}
       </div>
-
       <p className="text-gray-500 text-sm">{title}</p>
-
-      <h3
-        className={`text-2xl font-bold mt-1 ${
-          highlight ? "text-primary" : ""
-        }`}
-      >
+      <h3 className={`text-2xl font-bold mt-1 ${highlight ? "text-primary" : ""}`}>
         {value}{" "}
-        {suffix && (
-          <span className="text-sm text-gray-400 italic">
-            {suffix}
-          </span>
-        )}
+        {suffix && <span className="text-sm text-gray-400 italic">{suffix}</span>}
       </h3>
     </div>
   );
@@ -185,10 +246,7 @@ function KpiCard({ icon, title, value, suffix, trend, highlight }) {
 function StatusRow({ label, value, color }) {
   return (
     <div className="flex justify-between items-center text-sm mb-3">
-      <span className="flex items-center gap-2">
-        <span className={`size-2 rounded-full ${color}`}></span>
-        {label}
-      </span>
+      <span className="flex items-center gap-2"><span className={`size-2 rounded-full ${color}`}></span>{label}</span>
       <span className="font-bold">{value}</span>
     </div>
   );
@@ -200,12 +258,39 @@ function ActivityRow({ time, id, activity, status, value, color }) {
       <td className="px-6 py-4 text-sm text-gray-500">{time}</td>
       <td className="px-6 py-4 font-bold">{id}</td>
       <td className={`px-6 py-4 text-sm ${color}`}>{activity}</td>
-      <td className="px-6 py-4">
-        <span className="bg-gray-100 px-2 py-1 rounded-full text-xs font-bold">
-          {status}
-        </span>
-      </td>
-      <td className="px-6 py-4 text-right font-bold">{value}</td>
+      <td className="px-6 py-4 text-sm">{status}</td>
+      <td className="px-6 py-4 text-right font-semibold">{value}</td>
     </tr>
   );
+}
+
+function formatTimestamp(value) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function getActivityLabel(status) {
+  if (status === "APPROVED") {
+    return "Batch Certified";
+  }
+  if (status === "INSPECTED") {
+    return "Inspection Completed";
+  }
+  if (status === "REJECTED") {
+    return "Batch Rejected";
+  }
+  return "New Registration";
 }

@@ -1,6 +1,112 @@
+import { useEffect, useMemo, useState } from "react";
 import InspectorLayout from "../../layout/InspectorLayout";
 
 export default function InspectorAnalytics() {
+  const [batches, setBatches] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchBatches = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/saf");
+        if (!res.ok) {
+          throw new Error(`Failed to fetch analytics: ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (isMounted) {
+          setBatches(Array.isArray(data) ? data : []);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err.message || "Unable to load analytics details.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchBatches();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const metrics = useMemo(() => {
+    const totalInspections = batches.filter(
+      (batch) => batch.status === "INSPECTED" || batch.status === "APPROVED"
+    ).length;
+    const reviewed = batches.filter((batch) => batch.status !== "SUBMITTED").length;
+    const complianceRate = reviewed ? (totalInspections / reviewed) * 100 : 0;
+
+    const pathwayCount = batches.reduce((acc, batch) => {
+      const pathway = batch.productionPathway || "Unknown";
+      acc[pathway] = (acc[pathway] || 0) + 1;
+      return acc;
+    }, {});
+
+    const feedstockCount = batches.reduce((acc, batch) => {
+      const feedstock = batch.feedstockType || "Unknown";
+      acc[feedstock] = (acc[feedstock] || 0) + 1;
+      return acc;
+    }, {});
+
+    const facilities = batches.reduce((acc, batch) => {
+      const facility = batch.supplierWallet || "Unknown Facility";
+
+      if (!acc[facility]) {
+        acc[facility] = {
+          name: facility,
+          pathway: batch.productionPathway || "Unknown",
+          inspections: 0,
+          reviewed: 0
+        };
+      }
+
+      if (batch.status === "INSPECTED" || batch.status === "APPROVED") {
+        acc[facility].inspections += 1;
+      }
+
+      if (batch.status !== "SUBMITTED") {
+        acc[facility].reviewed += 1;
+      }
+
+      return acc;
+    }, {});
+
+    const topFacilities = Object.values(facilities)
+      .map((facility) => ({
+        ...facility,
+        score: facility.reviewed
+          ? `${((facility.inspections / facility.reviewed) * 100).toFixed(1)}%`
+          : "0.0%"
+      }))
+      .sort((a, b) => b.inspections - a.inspections)
+      .slice(0, 5);
+
+    return {
+      totalInspections,
+      complianceRate,
+      pathwayCount,
+      feedstockCount,
+      topFacilities
+    };
+  }, [batches]);
+
+  const pathwayDistribution = Object.entries(metrics.pathwayCount)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 4);
+
+  const feedstockDistribution = Object.entries(metrics.feedstockCount)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 4);
+
   return (
     <InspectorLayout active="analytics">
 
@@ -39,9 +145,30 @@ export default function InspectorAnalytics() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <KpiCard title="Total Inspections" value="1,284" percent="+12.5%" progress="75%" />
-        <KpiCard title="Compliance Rate" value="94.2%" percent="+2.1%" progress="94%" />
-        <KpiCard title="Avg. Verification Time" value="4.5 Days" percent="-0.5d" progress="40%" negative />
+        <KpiCard
+          title="Total Inspections"
+          value={isLoading ? "..." : metrics.totalInspections.toLocaleString()}
+          percent={isLoading ? "Loading" : `${batches.length} Batches`}
+          progress={batches.length ? `${Math.min((metrics.totalInspections / batches.length) * 100, 100)}%` : "0%"}
+        />
+        <KpiCard
+          title="Compliance Rate"
+          value={isLoading ? "..." : `${metrics.complianceRate.toFixed(1)}%`}
+          percent={error ? "Unavailable" : "Reviewed Batches"}
+          progress={isLoading ? "0%" : `${Math.min(metrics.complianceRate, 100)}%`}
+          negative={Boolean(error)}
+        />
+        <KpiCard
+          title="Open Reviews"
+          value={isLoading ? "..." : `${batches.filter((batch) => batch.status === "SUBMITTED").length}`}
+          percent={error ? "Action needed" : "Pending"}
+          progress={
+            batches.length
+              ? `${Math.min((batches.filter((batch) => batch.status === "SUBMITTED").length / batches.length) * 100, 100)}%`
+              : "0%"
+          }
+          negative
+        />
       </div>
 
       {/* Charts Section */}
@@ -53,10 +180,18 @@ export default function InspectorAnalytics() {
             Inspections by Pathway
           </h3>
 
-          <BarRow label="HEFA" value="482" width="85%" />
-          <BarRow label="Alcohol-to-Jet" value="312" width="55%" />
-          <BarRow label="Fischer-Tropsch" value="245" width="42%" />
-          <BarRow label="SIP" value="120" width="20%" />
+          {pathwayDistribution.length === 0 ? (
+            <p className="text-sm text-gray-500">No pathway details available yet.</p>
+          ) : (
+            pathwayDistribution.map(([label, value]) => (
+              <BarRow
+                key={label}
+                label={label}
+                value={value}
+                width={`${Math.min((value / pathwayDistribution[0][1]) * 100, 100)}%`}
+              />
+            ))
+          )}
         </div>
 
         {/* Feedstock Donut */}
@@ -66,12 +201,26 @@ export default function InspectorAnalytics() {
           </h3>
 
           <div className="space-y-4">
-            <Legend label="Used Cooking Oil" percent="45%" />
-            <Legend label="Animal Fats" percent="25%" />
-            <Legend label="Biomass/Waste" percent="30%" />
+            {feedstockDistribution.length === 0 ? (
+              <p className="text-sm text-gray-500">No feedstock details available yet.</p>
+            ) : (
+              feedstockDistribution.map(([label, value]) => (
+                <Legend
+                  key={label}
+                  label={label}
+                  percent={`${((value / batches.length) * 100 || 0).toFixed(1)}%`}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Top Facilities */}
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
@@ -95,9 +244,23 @@ export default function InspectorAnalytics() {
           </thead>
 
           <tbody className="divide-y">
-            <FacilityRow name="Neste Rotterdam B.V." pathway="HEFA" inspections="142" score="99.2%" />
-            <FacilityRow name="World Energy Paramount" pathway="AtJ" inspections="98" score="98.5%" />
-            <FacilityRow name="SkyNRG Harlingen" pathway="HEFA" inspections="76" score="97.8%" />
+            {metrics.topFacilities.length === 0 ? (
+              <tr>
+                <td className="px-6 py-4 text-sm text-gray-500" colSpan={4}>
+                  {isLoading ? "Loading facility details..." : "No facility details found."}
+                </td>
+              </tr>
+            ) : (
+              metrics.topFacilities.map((facility) => (
+                <FacilityRow
+                  key={facility.name}
+                  name={facility.name}
+                  pathway={facility.pathway}
+                  inspections={facility.inspections}
+                  score={facility.score}
+                />
+              ))
+            )}
           </tbody>
         </table>
       </div>

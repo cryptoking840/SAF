@@ -27,18 +27,21 @@ export default function InspectorLayout({ children }) {
             to="/inspector"
             label="Overview"
             icon="dashboard"
+            end
           />
 
           <SidebarItem
             to="/inspection/queue"
             label="Inspection Queue"
             icon="checklist"
+            end
           />
 
           <SidebarItem
             to="/inspector/analytics"
             label="Analytics"
             icon="analytics"
+            end
           />
 
         </nav>
@@ -54,16 +57,17 @@ export default function InspectorLayout({ children }) {
   );
 }
 
-function SidebarItem({ to, label, icon }) {
+function SidebarItem({ to, label, icon, end = false }) {
   return (
     <NavLink
       to={to}
+      end={end}
       className={({ isActive }) =>
         `flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition-all
         ${
           isActive
-            ? "bg-primary/20 border-l-4 border-primary text-black"
-            : "text-gray-600 hover:bg-primary/10 hover:text-black"
+            ? "bg-primary/20 border-l-4 border-primary text-primary"
+            : "text-gray-600 hover:bg-primary/10 hover:text-primary"
         }`
       }
     >
