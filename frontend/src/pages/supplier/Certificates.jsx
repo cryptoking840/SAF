@@ -1,29 +1,65 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AppLayout from "../../layout/AppLayout";
 import Modal from "../../components/Modal";
 import CertificateDetails from "../../components/CertificateDetails";
 
+const formatCertificateId = (certificateId) => {
+  if (certificateId === null || certificateId === undefined) {
+    return "Not generated";
+  }
+
+  return `SAF-${String(certificateId).padStart(6, "0")}`;
+};
+
 export default function Certificates() {
-
-  const [certificates] = useState([
-    {
-      id: "SAF-2023-001",
-      batchId: "Batch-882",
-      issueDate: "Oct 12, 2023",
-      quantity: 150.5,
-      status: "Certified",
-    },
-    {
-      id: "SAF-2023-002",
-      batchId: "Batch-890",
-      issueDate: "Oct 15, 2023",
-      quantity: 210.0,
-      status: "Certified",
-    }
-  ]);
-
+  const [certificates, setCertificates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [selectedCertificate, setSelectedCertificate] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const fetchApprovedCertificates = useCallback(async () => {
+    try {
+      setError("");
+
+      const res = await fetch(
+        "http://localhost:5000/api/saf/status?status=APPROVED"
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch certificates");
+      }
+
+      const approvedCertificates = data
+        .filter((batch) => batch.certificateId !== null && batch.certificateId !== undefined)
+        .map((batch) => ({
+          id: formatCertificateId(batch.certificateId),
+          key: `${batch._id}-${batch.certificateId}`,
+          batchId: batch.productionBatchId,
+          issueDate: new Date(batch.updatedAt).toLocaleDateString(),
+          quantity: batch.quantity,
+          status: "Certified",
+          txHash: batch.txHash,
+        }));
+
+      setCertificates(approvedCertificates);
+    } catch (err) {
+      console.error("Fetch certificates error:", err);
+      setError(err.message || "Unable to load certificates");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchApprovedCertificates();
+
+    const refreshTimer = setInterval(fetchApprovedCertificates, 10000);
+
+    return () => clearInterval(refreshTimer);
+  }, [fetchApprovedCertificates]);
 
   const openModal = (cert) => {
     setSelectedCertificate(cert);
@@ -37,8 +73,6 @@ export default function Certificates() {
 
   return (
     <AppLayout active="certificates">
-
-      {/* Table */}
       <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
         <table className="w-full text-left">
           <thead>
@@ -52,27 +86,46 @@ export default function Certificates() {
           </thead>
 
           <tbody>
-            {certificates.map((cert, index) => (
-              <tr key={index} className="border-t hover:bg-gray-50">
-                <td className="px-6 py-4">
-                  <button
-                    onClick={() => openModal(cert)}
-                    className="text-blue-600 font-bold hover:underline"
-                  >
-                    {cert.id}
-                  </button>
+            {loading ? (
+              <tr>
+                <td colSpan="5" className="px-6 py-8 text-center text-gray-400">
+                  Loading certificates...
                 </td>
-                <td className="px-6 py-4">{cert.batchId}</td>
-                <td className="px-6 py-4">{cert.issueDate}</td>
-                <td className="px-6 py-4 text-right">{cert.quantity}</td>
-                <td className="px-6 py-4">{cert.status}</td>
               </tr>
-            ))}
+            ) : error ? (
+              <tr>
+                <td colSpan="5" className="px-6 py-8 text-center text-red-500">
+                  {error}
+                </td>
+              </tr>
+            ) : certificates.length === 0 ? (
+              <tr>
+                <td colSpan="5" className="px-6 py-8 text-center text-gray-400">
+                  No approved certificates yet.
+                </td>
+              </tr>
+            ) : (
+              certificates.map((cert) => (
+                <tr key={cert.key} className="border-t hover:bg-gray-50">
+                  <td className="px-6 py-4">
+                    <button
+                      onClick={() => openModal(cert)}
+                      className="text-blue-600 font-bold hover:underline"
+                    >
+                      {cert.id}
+                    </button>
+                  </td>
+                  <td className="px-6 py-4">{cert.batchId}</td>
+                  <td className="px-6 py-4">{cert.issueDate}</td>
+                  <td className="px-6 py-4 text-right">{cert.quantity}</td>
+                  <td className="px-6 py-4">{cert.status}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Modal */}
       <Modal isOpen={isModalOpen} onClose={closeModal}>
         {selectedCertificate && (
           <CertificateDetails
@@ -81,7 +134,6 @@ export default function Certificates() {
           />
         )}
       </Modal>
-
     </AppLayout>
   );
 }
