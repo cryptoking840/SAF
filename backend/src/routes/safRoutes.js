@@ -60,8 +60,6 @@ FETCH (Blockchain Certificates)
 ====================================================
 */
 
-router.get("/saf", safController.getAllBatches);
-router.get("/saf/status", safController.getBatchesByStatus);
 router.post("/saf/reject", safController.rejectBatch);
 
 module.exports = router;

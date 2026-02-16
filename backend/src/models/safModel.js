@@ -40,11 +40,6 @@ const safSchema = new mongoose.Schema(
       type: String,
       default: "PENDING_BLOCKCHAIN",
     },
-    supplierWallet: {
-      type: String,
-      required: true
-    },
-
   },
   { timestamps: true }
 );
