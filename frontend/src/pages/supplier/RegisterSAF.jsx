@@ -49,12 +49,17 @@ export default function RegisterSAF({ onSuccess }) {
     try {
       setLoading(true);
 
-      await fetch("http://localhost:5000/api/register-saf", {
+      // 🔥 Updated to match your backend route
+      await fetch("http://localhost:5000/api/saf/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...formData,
-          status: "SUBMITTED"
+          productionBatchId: formData.poNumber,
+          productionDate: new Date().toISOString().split("T")[0],
+          quantity: Number(formData.quantity),
+          feedstockType: formData.feedstock,
+          carbonIntensity: Number(formData.blendingRatio),
+          productionPathway: formData.pathway
         })
       });
 
@@ -64,7 +69,7 @@ export default function RegisterSAF({ onSuccess }) {
       setFormData(initialFormState);
       setStep(1);
 
-      // Close modal if provided
+      // Close modal
       if (onSuccess) {
         onSuccess();
       }

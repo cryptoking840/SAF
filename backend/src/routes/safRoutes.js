@@ -4,25 +4,64 @@ const safController = require("../controllers/safController");
 
 console.log("SAF CONTROLLER FUNCTIONS:", Object.keys(safController));
 
-// ===============================
-// SAF FLOW
-// ===============================
-router.post("/register", safController.registerSAF);
-router.post("/inspect", safController.inspectSAF);
-router.post("/approve", safController.approveSAF);
-router.post("/list", safController.listCertificate);
+/*
+====================================================
+SUPPLIER FLOW
+====================================================
+*/
 
-// ===============================
-// BIDDING FLOW
-// ===============================
-router.post("/bid", safController.placeBid);
-router.post("/accept-bid", safController.acceptBid);
-router.post("/approve-trade", safController.approveTrade);
+// Submit batch (Mongo only)
+router.post("/saf/register", safController.registerSAF);
 
-// ===============================
-// FETCH
-// ===============================
-router.get("/certificates", safController.getAllCertificates);
-router.get("/certificates/:id", safController.getCertificate);
+/*
+====================================================
+INSPECTOR FLOW
+====================================================
+*/
+
+// Mark as inspected (Mongo only)
+router.post("/saf/inspect", safController.markInspected);
+
+/*
+====================================================
+REGISTRY FLOW
+====================================================
+*/
+
+// Approve & register on blockchain
+router.post("/saf/approve", safController.approveSAF);
+
+/*
+====================================================
+MARKETPLACE FLOW
+====================================================
+*/
+
+router.post("/saf/list", safController.listCertificate);
+router.post("/saf/bid", safController.placeBid);
+router.post("/saf/accept-bid", safController.acceptBid);
+router.post("/saf/approve-trade", safController.approveTrade);
+
+/*
+====================================================
+FETCH (Mongo Lifecycle)
+====================================================
+*/
+
+// Get batches by status
+router.get("/saf/status", safController.getBatchesByStatus);
+
+// Get all batches (Mongo)
+router.get("/saf", safController.getAllBatches);
+
+/*
+====================================================
+FETCH (Blockchain Certificates)
+====================================================
+*/
+
+router.get("/saf", safController.getAllBatches);
+router.get("/saf/status", safController.getBatchesByStatus);
+router.post("/saf/reject", safController.rejectBatch);
 
 module.exports = router;

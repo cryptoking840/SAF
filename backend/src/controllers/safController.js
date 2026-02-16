@@ -4,7 +4,25 @@ const { ethers } = require("ethers");
 
 /*
 ====================================================
-REGISTER SAF (Hybrid: Mongo + Blockchain)
+HELPER: Get Role-Based Wallet
+====================================================
+*/
+const getWallet = (role) => {
+  switch (role) {
+    case "REGISTRY":
+      return new ethers.Wallet(process.env.PRIVATE_KEY_REGISTRY, provider);
+    case "SUPPLIER":
+      return new ethers.Wallet(process.env.PRIVATE_KEY_SUPPLIER, provider);
+    case "AIRLINE":
+      return new ethers.Wallet(process.env.PRIVATE_KEY_AIRLINE, provider);
+    default:
+      throw new Error("Invalid role");
+  }
+};
+
+/*
+====================================================
+SUPPLIER: Submit SAF (Mongo Only)
 ====================================================
 */
 exports.registerSAF = async (req, res) => {
@@ -15,48 +33,29 @@ exports.registerSAF = async (req, res) => {
       quantity,
       feedstockType,
       carbonIntensity,
-      productionPathway,
-      supplierWallet,
-      privateKey,
+      productionPathway
     } = req.body;
 
-    if (!quantity || !privateKey || !productionBatchId) {
-      return res.status(400).json({
-        error: "Missing required fields",
-      });
+    if (!quantity || !productionBatchId) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Connect wallet
-    const wallet = new ethers.Wallet(privateKey, provider);
-    const userContract = contract.connect(wallet);
-
-    // Call blockchain
-    const tx = await userContract.registerSAF(quantity);
-    const receipt = await tx.wait();
-
-    // Get new certificate ID
-    const certId = await contract.certificateCounter();
-
-    // Save full metadata in MongoDB
     const safDoc = await SAF.create({
-      certificateId: Number(certId),
       productionBatchId,
       productionDate,
       quantity,
       feedstockType,
       carbonIntensity,
       productionPathway,
-      supplierWallet,
-      txHash: tx.hash,
-      status: "REGISTERED",
+      supplierWallet: process.env.SUPPLIER_ADDRESS,
+      status: "SUBMITTED"
     });
 
     res.json({
-      message: "SAF Registered Successfully",
-      certificateId: certId.toString(),
-      txHash: tx.hash,
-      mongoId: safDoc._id,
+      message: "Batch submitted for Inspector review",
+      mongoId: safDoc._id
     });
+
   } catch (err) {
     console.error("REGISTER ERROR:", err);
     res.status(500).json({ error: err.message });
@@ -65,178 +64,241 @@ exports.registerSAF = async (req, res) => {
 
 /*
 ====================================================
-GET ALL CERTIFICATES (Merged On-chain + Mongo)
+INSPECTOR: Mark as Inspected
 ====================================================
 */
-exports.getAllCertificates = async (req, res) => {
+exports.markInspected = async (req, res) => {
   try {
-    const count = await contract.certificateCounter();
-    const certificates = [];
+    const { id } = req.body;
 
-    for (let i = 1; i <= Number(count); i++) {
-      const cert = await contract.certificates(i);
+    const batch = await SAF.findById(id);
 
-      certificates.push({
-        id: cert.id.toString(),
-        parentId: cert.parentId.toString(),
-        originalQuantity: cert.originalQuantity.toString(),
-        remainingQuantity: cert.remainingQuantity.toString(),
-        owner: cert.owner,
-        isListed: cert.isListed,
-        status: cert.status.toString()
-      });
+    if (!batch) {
+      return res.status(404).json({ error: "Batch not found" });
     }
 
-    res.json(certificates);
+    if (batch.status !== "SUBMITTED") {
+      return res.status(400).json({ error: "Batch not in submitted state" });
+    }
 
-  } catch (error) {
-    console.error("GET ALL ERROR:", error);
-    res.status(500).json({ error: "Failed to fetch certificates" });
-  }
-};
-
-
-/*
-====================================================
-GET SINGLE CERTIFICATE
-====================================================
-*/
-exports.getCertificate = async (req, res) => {
-  try {
-    const cert = await contract.certificates(req.params.id);
+    batch.status = "INSPECTED";
+    await batch.save();
 
     res.json({
-      id: cert.id.toString(),
-      parentId: cert.parentId.toString(),
-      originalQuantity: cert.originalQuantity.toString(),
-      remainingQuantity: cert.remainingQuantity.toString(),
-      owner: cert.owner,
-      isListed: cert.isListed,
-      status: cert.status.toString()
+      message: "Batch marked as inspected",
+      batch
     });
 
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-
-/*
-====================================================
-INSPECT SAF
-====================================================
-*/
-exports.inspectSAF = async (req, res) => {
-  try {
-    const { certId, privateKey } = req.body;
-
-    const wallet = new ethers.Wallet(privateKey, provider);
-    const userContract = contract.connect(wallet);
-
-    const tx = await userContract.inspectSAF(certId);
-    await tx.wait();
-
-    res.json({ message: "SAF Inspected", txHash: tx.hash });
   } catch (err) {
+    console.error("INSPECT ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 /*
 ====================================================
-APPROVE SAF (Registry Only)
+INSPECTOR: Reject Batch
+====================================================
+*/
+exports.rejectBatch = async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    const batch = await SAF.findById(id);
+
+    if (!batch) {
+      return res.status(404).json({ error: "Batch not found" });
+    }
+
+    batch.status = "REJECTED";
+    await batch.save();
+
+    res.json({
+      message: "Batch rejected successfully",
+      batch
+    });
+
+  } catch (err) {
+    console.error("REJECT ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/*
+====================================================
+REGISTRY: Approve & Register on Blockchain
 ====================================================
 */
 exports.approveSAF = async (req, res) => {
   try {
-    const { certId } = req.body;
+    const { id } = req.body;
 
-    const tx = await contract.approveSAF(certId);
+    const batch = await SAF.findById(id);
+
+    if (!batch) {
+      return res.status(404).json({ error: "Batch not found" });
+    }
+
+    if (batch.status !== "INSPECTED") {
+      return res.status(400).json({ error: "Batch not inspected yet" });
+    }
+
+    if (!batch.supplierWallet) {
+      return res.status(400).json({ error: "Supplier wallet missing" });
+    }
+
+    const wallet = getWallet("REGISTRY");
+    const registryContract = contract.connect(wallet);
+
+    // 🔥 Correct contract signature
+    const tx = await registryContract.registerSAF(
+      batch.quantity,
+      batch.supplierWallet
+    );
+
     await tx.wait();
 
-    res.json({ message: "SAF Approved", txHash: tx.hash });
+    // 🔥 Read counter safely
+    const certIdBigInt = await registryContract.certificateCounter();
+    const certId = Number(certIdBigInt); // Convert BigInt → Number
+
+    batch.status = "APPROVED";
+    batch.certificateId = certId;
+    batch.txHash = tx.hash;
+
+    await batch.save();
+
+    res.json({
+      message: "Approved and registered on blockchain",
+      certificateId: certId,
+      txHash: tx.hash
+    });
+
   } catch (err) {
+    console.error("REGISTRY APPROVAL ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 /*
 ====================================================
-LIST CERTIFICATE
+LIST CERTIFICATE (Supplier Only)
 ====================================================
 */
 exports.listCertificate = async (req, res) => {
   try {
-    const { certId, privateKey } = req.body;
+    const { certId } = req.body;
 
-    const wallet = new ethers.Wallet(privateKey, provider);
-    const userContract = contract.connect(wallet);
+    const wallet = getWallet("SUPPLIER");
+    const supplierContract = contract.connect(wallet);
 
-    const tx = await userContract.listCertificate(certId);
+    const tx = await supplierContract.listCertificate(certId);
     await tx.wait();
 
     res.json({ message: "Listed Successfully", txHash: tx.hash });
+
   } catch (err) {
+    console.error("LIST ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 /*
 ====================================================
-PLACE BID
+PLACE BID (Airline Only)
 ====================================================
 */
 exports.placeBid = async (req, res) => {
   try {
-    const { certId, quantity, price, privateKey } = req.body;
+    const { certId, quantity, price } = req.body;
 
-    const wallet = new ethers.Wallet(privateKey, provider);
-    const userContract = contract.connect(wallet);
+    const wallet = getWallet("AIRLINE");
+    const airlineContract = contract.connect(wallet);
 
-    const tx = await userContract.placeBid(certId, quantity, price);
+    const tx = await airlineContract.placeBid(certId, quantity, price);
     await tx.wait();
 
     res.json({ message: "Bid Placed", txHash: tx.hash });
+
   } catch (err) {
+    console.error("BID ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 /*
 ====================================================
-ACCEPT BID
+ACCEPT BID (Supplier Only)
 ====================================================
 */
 exports.acceptBid = async (req, res) => {
   try {
-    const { bidId, privateKey } = req.body;
+    const { bidId } = req.body;
 
-    const wallet = new ethers.Wallet(privateKey, provider);
-    const userContract = contract.connect(wallet);
+    const wallet = getWallet("SUPPLIER");
+    const supplierContract = contract.connect(wallet);
 
-    const tx = await userContract.acceptBid(bidId);
+    const tx = await supplierContract.acceptBid(bidId);
     await tx.wait();
 
     res.json({ message: "Bid Accepted", txHash: tx.hash });
+
   } catch (err) {
+    console.error("ACCEPT BID ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 /*
 ====================================================
-APPROVE TRADE (Registry)
+APPROVE TRADE (Registry Only)
 ====================================================
 */
 exports.approveTrade = async (req, res) => {
   try {
     const { bidId } = req.body;
 
-    const tx = await contract.approveTrade(bidId);
+    const wallet = getWallet("REGISTRY");
+    const registryContract = contract.connect(wallet);
+
+    const tx = await registryContract.approveTrade(bidId);
     await tx.wait();
 
     res.json({ message: "Trade Approved", txHash: tx.hash });
+
   } catch (err) {
+    console.error("APPROVE TRADE ERROR:", err);
     res.status(500).json({ error: err.message });
+  }
+};
+
+/*
+====================================================
+FETCH BY STATUS
+====================================================
+*/
+exports.getBatchesByStatus = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const batches = await SAF.find({ status });
+    res.json(batches);
+  } catch (err) {
+    console.error("FETCH STATUS ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/*
+====================================================
+GET ALL BATCHES
+====================================================
+*/
+exports.getAllBatches = async (req, res) => {
+  try {
+    const batches = await SAF.find();
+    res.json(batches);
+  } catch (error) {
+    console.error("FETCH ALL ERROR:", error);
+    res.status(500).json({ error: error.message });
   }
 };

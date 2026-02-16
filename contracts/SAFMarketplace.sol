@@ -85,8 +85,7 @@ contract SAFMarketplace {
     // EVENTS
     // -----------------------------
 
-    event SAFRegistered(uint256 certId);
-    event SAFInspected(uint256 certId);
+    event SAFRegistered(uint256 certId, address supplier);
     event SAFApproved(uint256 certId);
     event Listed(uint256 certId);
     event BidPlaced(uint256 bidId);
@@ -118,10 +117,16 @@ contract SAFMarketplace {
     }
 
     // -----------------------------
-    // SAF REGISTRATION FLOW
+    // SAF REGISTRATION (Registry Controlled)
     // -----------------------------
 
-    function registerSAF(uint256 quantity) external onlySupplier {
+    function registerSAF(
+        uint256 quantity,
+        address supplierWallet
+    ) external onlyRegistry {
+
+        require(suppliers[supplierWallet], "Supplier not approved");
+
         certificateCounter++;
 
         certificates[certificateCounter] = SAFc({
@@ -129,26 +134,12 @@ contract SAFMarketplace {
             parentId: 0,
             originalQuantity: quantity,
             remainingQuantity: quantity,
-            owner: msg.sender,
+            owner: supplierWallet,
             isListed: false,
-            status: Status.REGISTERED
+            status: Status.CERTIFIED
         });
 
-        emit SAFRegistered(certificateCounter);
-    }
-
-    function inspectSAF(uint256 certId) external onlyInspector {
-        require(certificates[certId].status == Status.REGISTERED, "Invalid state");
-
-        certificates[certId].status = Status.INSPECTED;
-        emit SAFInspected(certId);
-    }
-
-    function approveSAF(uint256 certId) external onlyRegistry {
-        require(certificates[certId].status == Status.INSPECTED, "Invalid state");
-
-        certificates[certId].status = Status.CERTIFIED;
-        emit SAFApproved(certId);
+        emit SAFRegistered(certificateCounter, supplierWallet);
     }
 
     // -----------------------------
@@ -215,7 +206,6 @@ contract SAFMarketplace {
 
         parent.remainingQuantity -= bid.quantity;
 
-        // Create child certificate
         certificateCounter++;
 
         certificates[certificateCounter] = SAFc({
@@ -238,17 +228,4 @@ contract SAFMarketplace {
 
         emit TradeApproved(bidId, certificateCounter);
     }
-
 }
-
-
-//Multiple SAF registrations
-// Inspector validation
-// Registry mint approval
-// Supplier listing
-// Airline bidding
-// Supplier accept
-// Registry final approval
-// Parent-child split
-// Remaining quantity validation
-// No double spending possible

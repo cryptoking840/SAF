@@ -18,6 +18,7 @@ import ParticipantApprovals from "./pages/registry/ParticipantApprovals";
 function App() {
   return (
     <BrowserRouter>
+      
       <Routes>
 
         {/* Authentication Route */}

@@ -23,7 +23,7 @@ export default function BatchManagement() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/certificates")
+    fetch("http://localhost:5000/api/saf/all")
       .then((res) => res.json())
       .then((data) => setBatches(data))
       .catch((err) => console.error("Fetch error:", err));
