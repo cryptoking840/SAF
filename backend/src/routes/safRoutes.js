@@ -2,8 +2,6 @@ const express = require("express");
 const router = express.Router();
 const safController = require("../controllers/safController");
 
-console.log("SAF CONTROLLER FUNCTIONS:", Object.keys(safController));
-
 /*
 ====================================================
 SUPPLIER FLOW

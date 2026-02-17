@@ -39,7 +39,7 @@ export const placeMarketplaceBid = async ({ certId, quantity, price, walletAddre
   return request("/saf/bid", {
     method: "POST",
     headers: walletAddress ? { "x-wallet-address": walletAddress } : undefined,
-    body: JSON.stringify({ certId, quantity, price }),
+    body: JSON.stringify({ certId, certificateId: certId, quantity, price }),
   });
 };
 

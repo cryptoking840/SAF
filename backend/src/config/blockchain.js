@@ -3,8 +3,6 @@ require("dotenv").config();
 
 console.log("RPC:", process.env.RPC_URL);
 console.log("ADDRESS:", process.env.CONTRACT_ADDRESS);
-console.log("PK:", process.env.PRIVATE_KEY_REGISTRY);
-
 
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 
