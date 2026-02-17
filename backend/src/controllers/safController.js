@@ -321,6 +321,7 @@ exports.listCertificate = async (req, res) => {
 
     const certificateId = Number(certId);
     if (!Number.isFinite(certificateId) || certificateId <= 0) {
+      return res.status(400).json({ error: "certId must be a positive number", receivedCertId: certId ?? null });
       return res.status(400).json({ error: "certId must be a positive number", receivedCertId: rawCertificateId ?? null });
     }
 
