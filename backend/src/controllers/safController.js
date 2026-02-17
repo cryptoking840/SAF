@@ -26,6 +26,24 @@ const resolveSupplierWallet = (req) => {
   );
 };
 
+const resolveAirlineWallet = (req) => {
+  return (
+    req.user?.walletAddress ||
+    req.headers["x-wallet-address"] ||
+    req.headers["x-airline-wallet"] ||
+    process.env.AIRLINE_ADDRESS ||
+    ""
+  );
+};
+
+const formatWallet = (wallet) => {
+  if (!wallet) {
+    return "Unknown";
+  }
+
+  return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+};
+
 const getAirlineName = (wallet) => {
   try {
     const directory = JSON.parse(process.env.AIRLINE_DIRECTORY || "{}");
@@ -560,6 +578,120 @@ exports.getIncomingBids = async (req, res) => {
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error("FETCH INCOMING BIDS ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/*
+====================================================
+FETCH ACTIVE MARKETPLACE LISTINGS (Airline View)
+====================================================
+*/
+exports.getMarketplaceListings = async (_req, res) => {
+  try {
+    const totalCertificates = Number(await contract.certificateCounter());
+    const listings = [];
+
+    for (let certId = 1; certId <= totalCertificates; certId += 1) {
+      const cert = await contract.certificates(certId);
+
+      if (!cert.isListed || Number(cert.remainingQuantity) <= 0) {
+        continue;
+      }
+
+      const batch = await SAF.findOne({ certificateId: certId }).lean();
+
+      listings.push({
+        certificateId: certId,
+        supplierWallet: cert.owner,
+        supplierName: formatWallet(cert.owner),
+        availableQuantity: Number(cert.remainingQuantity),
+        originalQuantity: Number(cert.originalQuantity),
+        productionBatchId: batch?.productionBatchId || `#${certId}`,
+        feedstockType: batch?.feedstockType || "N/A",
+        carbonIntensity: batch?.carbonIntensity,
+        blockchainState: statusLabel[Number(cert.status)] || "UNKNOWN",
+      });
+    }
+
+    res.json({ success: true, data: listings });
+  } catch (err) {
+    console.error("FETCH MARKETPLACE LISTINGS ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/*
+====================================================
+FETCH BIDS FOR AIRLINE (My Bids)
+====================================================
+*/
+exports.getMyBids = async (req, res) => {
+  try {
+    const airlineWallet = resolveAirlineWallet(req);
+
+    if (!airlineWallet) {
+      return res.status(400).json({ error: "Airline wallet not found" });
+    }
+
+    const totalBids = Number(await contract.bidCounter());
+    const rows = [];
+
+    for (let bidId = 1; bidId <= totalBids; bidId += 1) {
+      const blockchainBid = await contract.bids(bidId);
+
+      if (Number(blockchainBid.id) === 0) {
+        continue;
+      }
+
+      if (String(blockchainBid.airline).toLowerCase() !== airlineWallet.toLowerCase()) {
+        continue;
+      }
+
+      const certId = Number(blockchainBid.certificateId);
+      const cert = await contract.certificates(certId);
+
+      const bidDoc = await Bid.findOneAndUpdate(
+        { bidId },
+        {
+          bidId,
+          certificateId: certId,
+          supplierWallet: cert.owner,
+          airlineWallet: blockchainBid.airline,
+          status: blockchainBid.accepted ? "Accepted" : "Pending",
+          expiryAt: new Date(Date.now() + DEFAULT_BID_EXPIRY_HOURS * 60 * 60 * 1000),
+        },
+        {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: true,
+        }
+      );
+
+      const status = normalizeBidState(bidDoc, blockchainBid);
+
+      if (status !== bidDoc.status) {
+        bidDoc.status = status;
+        await bidDoc.save();
+      }
+
+      rows.push({
+        bidId,
+        certificateId: certId,
+        supplierWallet: cert.owner,
+        supplierName: formatWallet(cert.owner),
+        quantity: Number(blockchainBid.quantity),
+        originalPricePerMT: Number(blockchainBid.price),
+        bidPricePerMT: bidDoc.counterPrice || Number(blockchainBid.price),
+        status,
+        submittedAt: bidDoc.createdAt,
+        expiryAt: bidDoc.expiryAt,
+      });
+    }
+
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error("FETCH MY BIDS ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
