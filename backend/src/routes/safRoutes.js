@@ -10,7 +10,6 @@ SUPPLIER FLOW
 ====================================================
 */
 
-// Submit batch (Mongo only)
 router.post("/saf/register", safController.registerSAF);
 
 /*
@@ -19,7 +18,6 @@ INSPECTOR FLOW
 ====================================================
 */
 
-// Mark as inspected (Mongo only)
 router.post("/saf/inspect", safController.markInspected);
 
 /*
@@ -28,7 +26,6 @@ REGISTRY FLOW
 ====================================================
 */
 
-// Approve & register on blockchain
 router.post("/saf/approve", safController.approveSAF);
 
 /*
@@ -42,16 +39,18 @@ router.post("/saf/bid", safController.placeBid);
 router.post("/saf/accept-bid", safController.acceptBid);
 router.post("/saf/approve-trade", safController.approveTrade);
 
+router.get("/marketplace/incoming-bids", safController.getIncomingBids);
+router.post("/marketplace/bid/accept", safController.acceptBid);
+router.post("/marketplace/bid/counter", safController.counterBid);
+router.post("/marketplace/bid/deny", safController.denyBid);
+
 /*
 ====================================================
 FETCH (Mongo Lifecycle)
 ====================================================
 */
 
-// Get batches by status
 router.get("/saf/status", safController.getBatchesByStatus);
-
-// Get all batches (Mongo)
 router.get("/saf", safController.getAllBatches);
 
 /*
