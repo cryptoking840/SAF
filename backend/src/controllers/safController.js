@@ -78,13 +78,18 @@ const getWallet = (role) => {
 };
 
 
-const getSupplierSignerForCertificate = async (certificateId) => {
+const getSupplierSignerForCertificate = async (certificateId, req) => {
   const cert = await contract.certificates(certificateId);
-  const owner = String(cert.owner || "").toLowerCase();
+  const ownerFromChain = String(cert.owner || cert[4] || "").toLowerCase();
 
-  if (!owner || owner === ethers.ZeroAddress) {
-    throw new Error("Certificate owner not found");
-  }
+  const batch = await SAF.findOne({ certificateId }).select("supplierWallet").lean();
+  const ownerFromDb = String(batch?.supplierWallet || "").toLowerCase();
+  const ownerFromRequest = String(resolveSupplierWallet(req) || "").toLowerCase();
+
+  const owner =
+    ownerFromChain && ownerFromChain !== ethers.ZeroAddress
+      ? ownerFromChain
+      : ownerFromDb || ownerFromRequest;
 
   let privateKeyDirectory = {};
   try {
@@ -93,10 +98,22 @@ const getSupplierSignerForCertificate = async (certificateId) => {
     privateKeyDirectory = {};
   }
 
-  const ownerPrivateKey = privateKeyDirectory[owner];
+  const normalizedPrivateKeyDirectory = Object.entries(privateKeyDirectory).reduce(
+    (acc, [walletAddress, privateKey]) => {
+      acc[String(walletAddress).toLowerCase()] = privateKey;
+      return acc;
+    },
+    {}
+  );
+
+  const ownerPrivateKey = owner ? normalizedPrivateKeyDirectory[owner] : null;
 
   if (ownerPrivateKey) {
     return new ethers.Wallet(ownerPrivateKey, provider);
+  }
+
+  if (!owner) {
+    return getWallet("SUPPLIER");
   }
 
   return provider.getSigner(owner);
@@ -278,7 +295,7 @@ exports.listCertificate = async (req, res) => {
       return res.status(400).json({ error: "certId must be a positive number" });
     }
 
-    const supplierSigner = await getSupplierSignerForCertificate(certificateId);
+    const supplierSigner = await getSupplierSignerForCertificate(certificateId, req);
     const supplierContract = contract.connect(supplierSigner);
 
     const tx = await supplierContract.listCertificate(certificateId);
