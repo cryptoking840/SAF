@@ -7,7 +7,7 @@ import {
 
 const fallbackListings = [
   {
-    certId: "10293-84",
+    certId: "1029384",
     supplier: "SkyPure Biofuels",
     certification: "ISCC-EU",
     price: 1180,
@@ -17,7 +17,7 @@ const fallbackListings = [
     badge: null,
   },
   {
-    certId: "GS-8842-12",
+    certId: "884212",
     supplier: "GreenWing Logistics",
     certification: "Gold Standard",
     price: 1450,
@@ -27,7 +27,7 @@ const fallbackListings = [
     badge: null,
   },
   {
-    certId: "RSB-004-PQ",
+    certId: "400401",
     supplier: "BioStream Energy",
     certification: "RSB-Global",
     price: 1210,
@@ -37,7 +37,7 @@ const fallbackListings = [
     badge: "new",
   },
   {
-    certId: "10294-01",
+    certId: "1029401",
     supplier: "AeroFuel Sustainable",
     certification: "ISCC-EU",
     price: 1310,
@@ -123,9 +123,25 @@ export default function AirlineMarketplace() {
     const certId = Number(selectedListing.certId);
     const quantity = Number(bidQuantity);
     const price = Number(bidPrice);
+    const availableVolume = Number(selectedListing.volume);
 
-    if (!certId || !quantity || !price || quantity <= 0 || price <= 0) {
-      setError("Please enter valid bid quantity and price.");
+    if (!Number.isFinite(certId) || certId <= 0) {
+      setError("This listing is not ready for bidding yet. Please refresh marketplace data.");
+      return;
+    }
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setError("Please enter a valid bid quantity greater than 0.");
+      return;
+    }
+
+    if (Number.isFinite(availableVolume) && availableVolume > 0 && quantity > availableVolume) {
+      setError(`Quantity cannot exceed available volume (${availableVolume} MT).`);
+      return;
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      setError("Please enter a valid bid price greater than 0.");
       return;
     }
 
