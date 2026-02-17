@@ -39,6 +39,8 @@ router.post("/saf/bid", safController.placeBid);
 router.post("/saf/accept-bid", safController.acceptBid);
 router.post("/saf/approve-trade", safController.approveTrade);
 
+router.get("/marketplace/listings", safController.getMarketplaceListings);
+router.get("/marketplace/my-bids", safController.getMyBids);
 router.get("/marketplace/incoming-bids", safController.getIncomingBids);
 router.post("/marketplace/bid/accept", safController.acceptBid);
 router.post("/marketplace/bid/counter", safController.counterBid);

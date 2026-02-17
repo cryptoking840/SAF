@@ -1,6 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  fetchMarketplaceListings,
+  fetchMyBids,
+  placeMarketplaceBid,
+} from "../../api/safApi";
 
-const listings = [
+const fallbackListings = [
   {
     certId: "10293-84",
     supplier: "SkyPure Biofuels",
@@ -43,8 +48,48 @@ const listings = [
   },
 ];
 
+const mapListing = (item) => ({
+  certId: String(item.certificateId),
+  supplier: item.supplierName || item.supplierWallet || "Unknown Supplier",
+  certification: item.feedstockType || "SAF",
+  price: Number(item.referencePricePerMT || item.bidPricePerMT || 0),
+  co2eReduction: Number(item.carbonIntensity || 0),
+  volume: Number(item.availableQuantity || 0),
+  expiry: item.blockchainState === "LISTED" ? "LIVE" : item.blockchainState || "LISTED",
+  badge: item.blockchainState === "LISTED" ? "new" : null,
+});
+
 export default function AirlineMarketplace() {
   const [query, setQuery] = useState("");
+  const [listings, setListings] = useState(fallbackListings);
+  const [myBids, setMyBids] = useState([]);
+  const [showMyBids, setShowMyBids] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [selectedListing, setSelectedListing] = useState(null);
+  const [bidQuantity, setBidQuantity] = useState(1);
+  const [bidPrice, setBidPrice] = useState("");
+  const [submittingBid, setSubmittingBid] = useState(false);
+
+  const loadMarketplace = async () => {
+    try {
+      setLoading(true);
+      const [listingRes, bidRes] = await Promise.all([fetchMarketplaceListings(), fetchMyBids()]);
+      if (Array.isArray(listingRes?.data) && listingRes.data.length > 0) {
+        setListings(listingRes.data.map(mapListing));
+      }
+      setMyBids(Array.isArray(bidRes?.data) ? bidRes.data : []);
+      setError("");
+    } catch (err) {
+      setError(err.message || "Unable to load marketplace data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMarketplace();
+  }, []);
 
   const filteredListings = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -57,7 +102,39 @@ export default function AirlineMarketplace() {
         item.certification.toLowerCase().includes(normalized)
       );
     });
-  }, [query]);
+  }, [listings, query]);
+
+  const openBidDialog = (item) => {
+    setSelectedListing(item);
+    setBidQuantity(1);
+    setBidPrice(item.price || "");
+  };
+
+  const submitBid = async () => {
+    if (!selectedListing) return;
+
+    const certId = Number(selectedListing.certId);
+    const quantity = Number(bidQuantity);
+    const price = Number(bidPrice);
+
+    if (!certId || !quantity || !price || quantity <= 0 || price <= 0) {
+      setError("Please enter valid bid quantity and price.");
+      return;
+    }
+
+    try {
+      setSubmittingBid(true);
+      await placeMarketplaceBid({ certId, quantity, price });
+      setSelectedListing(null);
+      await loadMarketplace();
+      setShowMyBids(true);
+      setError("");
+    } catch (err) {
+      setError(err.message || "Bid submission failed");
+    } finally {
+      setSubmittingBid(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-background-light text-slate-900">
@@ -73,8 +150,8 @@ export default function AirlineMarketplace() {
         </div>
 
         <nav className="mt-2 flex-1 space-y-2 px-4">
-          <NavRow icon="storefront" label="Marketplace" active />
-          <NavRow icon="gavel" label="My Bids" pill="3" />
+          <NavRow icon="storefront" label="Marketplace" active={!showMyBids} onClick={() => setShowMyBids(false)} />
+          <NavRow icon="gavel" label="My Bids" pill={String(myBids.length)} active={showMyBids} onClick={() => setShowMyBids(true)} />
           <NavRow icon="inventory_2" label="Inventory" />
           <NavRow icon="monitoring" label="Analytics" />
         </nav>
@@ -104,6 +181,8 @@ export default function AirlineMarketplace() {
           </div>
         </header>
 
+        {error && <p className="mb-4 text-sm font-medium text-red-600">{error}</p>}
+
         <section className="mb-8 flex flex-wrap items-center gap-4 rounded-xl border border-primary/10 bg-white p-4 shadow-sm">
           <div className="relative min-w-[300px] flex-1">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -117,68 +196,165 @@ export default function AirlineMarketplace() {
             />
           </div>
 
-          <button className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-black">Place Bid</button>
+          <button className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-black" onClick={loadMarketplace}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
         </section>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredListings.map((item) => (
-            <article key={item.certId} className="flex flex-col rounded-xl border border-primary/10 bg-white shadow-sm">
-              <div className="space-y-4 p-6">
-                <div className="flex items-start justify-between">
+        {!showMyBids && (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredListings.map((item) => (
+              <article key={item.certId} className="flex flex-col rounded-xl border border-primary/10 bg-white shadow-sm">
+                <div className="space-y-4 p-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                        {item.certification}
+                      </span>
+                      <h3 className="mt-1 text-lg font-bold">Cert ID: {item.certId}</h3>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-400">Current Price</p>
+                      <p className="text-lg font-bold text-primary">${Number(item.price || 0).toLocaleString()}/MT</p>
+                    </div>
+                  </div>
+
                   <div>
-                    <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                      {item.certification}
-                    </span>
-                    <h3 className="mt-1 text-lg font-bold">Cert ID: {item.certId}</h3>
+                    <p className="text-xs text-slate-500">Supplier</p>
+                    <p className="text-sm font-bold">{item.supplier}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-400">Current Price</p>
-                    <p className="text-lg font-bold text-primary">${item.price.toLocaleString()}/MT</p>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-slate-50 p-3">
+                      <p className="text-[10px] font-bold uppercase text-slate-500">CO2e Reduction</p>
+                      <p className="text-lg font-bold text-primary">{item.co2eReduction}%</p>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-3">
+                      <p className="text-[10px] font-bold uppercase text-slate-500">Available Qty</p>
+                      <p className="text-lg font-bold">{item.volume} MT</p>
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <p className="text-xs text-slate-500">Supplier</p>
-                  <p className="text-sm font-bold">{item.supplier}</p>
+                <div className="mt-auto flex items-center justify-between border-t border-slate-100 bg-slate-50/50 p-4">
+                  <p className={`text-xs font-bold ${item.badge === "warning" ? "text-red-500" : "text-slate-500"}`}>
+                    {item.expiry}
+                  </p>
+                  <button className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-black" onClick={() => openBidDialog(item)}>
+                    Place Bid
+                  </button>
                 </div>
+              </article>
+            ))}
+          </div>
+        )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-slate-50 p-3">
-                    <p className="text-[10px] font-bold uppercase text-slate-500">CO2e Reduction</p>
-                    <p className="text-lg font-bold text-primary">{item.co2eReduction}%</p>
-                  </div>
-                  <div className="rounded-lg bg-slate-50 p-3">
-                    <p className="text-[10px] font-bold uppercase text-slate-500">Available Qty</p>
-                    <p className="text-lg font-bold">{item.volume} MT</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-auto flex items-center justify-between border-t border-slate-100 bg-slate-50/50 p-4">
-                <p className={`text-xs font-bold ${item.badge === "warning" ? "text-red-500" : "text-slate-500"}`}>
-                  {item.expiry}
-                </p>
-                <button className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-black">Place Bid</button>
-              </div>
-            </article>
-          ))}
-        </div>
+        {showMyBids && (
+          <div className="rounded-xl border border-primary/10 bg-white shadow-sm">
+            <div className="border-b border-slate-100 p-4">
+              <h3 className="text-lg font-bold">My Bids</h3>
+              <p className="text-xs text-slate-500">Bid lifecycle and current status for submitted bids.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-left">
+                  <tr>
+                    <th className="px-4 py-3">Bid ID</th>
+                    <th className="px-4 py-3">Certificate</th>
+                    <th className="px-4 py-3">Supplier</th>
+                    <th className="px-4 py-3">Quantity</th>
+                    <th className="px-4 py-3">Price/MT</th>
+                    <th className="px-4 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {myBids.map((bid) => (
+                    <tr key={bid.bidId} className="border-t border-slate-100">
+                      <td className="px-4 py-3">#{bid.bidId}</td>
+                      <td className="px-4 py-3">{bid.certificateId}</td>
+                      <td className="px-4 py-3">{bid.supplierName || bid.supplierWallet}</td>
+                      <td className="px-4 py-3">{bid.quantity}</td>
+                      <td className="px-4 py-3">${Number(bid.bidPricePerMT || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3 font-semibold">{bid.status}</td>
+                    </tr>
+                  ))}
+                  {myBids.length === 0 && (
+                    <tr>
+                      <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                        No bids found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </main>
+
+      {selectedListing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-lg">
+            <h3 className="text-lg font-bold">Place Bid</h3>
+            <p className="mt-1 text-sm text-slate-500">Cert ID: {selectedListing.certId}</p>
+            <p className="text-sm text-slate-500">Supplier: {selectedListing.supplier}</p>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Quantity (MT)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max={selectedListing.volume}
+                  value={bidQuantity}
+                  onChange={(event) => setBidQuantity(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Price per MT</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={bidPrice}
+                  onChange={(event) => setBidPrice(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold" onClick={() => setSelectedListing(null)}>
+                Cancel
+              </button>
+              <button
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-black"
+                onClick={submitBid}
+                disabled={submittingBid}
+              >
+                {submittingBid ? "Submitting..." : "Submit Bid"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function NavRow({ icon, label, active = false, pill }) {
+function NavRow({ icon, label, active = false, pill, onClick }) {
   return (
-    <div
-      className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium ${
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-left ${
         active ? "bg-primary/10 text-primary" : "hover:bg-primary/5"
       }`}
     >
       <span className="material-symbols-outlined">{icon}</span>
       <span>{label}</span>
       {pill && <span className="ml-auto rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold text-black">{pill}</span>}
-    </div>
+    </button>
   );
 }
 
