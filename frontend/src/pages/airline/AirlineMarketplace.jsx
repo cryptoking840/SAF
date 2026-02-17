@@ -48,16 +48,28 @@ const fallbackListings = [
   },
 ];
 
-const mapListing = (item) => ({
-  certId: String(item.certificateId),
-  supplier: item.supplierName || item.supplierWallet || "Unknown Supplier",
-  certification: item.feedstockType || "SAF",
-  price: Number(item.referencePricePerMT || item.bidPricePerMT || 0),
-  co2eReduction: Number(item.carbonIntensity || 0),
-  volume: Number(item.availableQuantity || 0),
-  expiry: item.blockchainState === "LISTED" ? "LIVE" : item.blockchainState || "LISTED",
-  badge: item.blockchainState === "LISTED" ? "new" : null,
-});
+const mapListing = (item) => {
+  // Ensure we have a valid certId - use certId first, then certificateId
+  const certIdValue = item.certId ?? item.certificateId;
+  
+  if (!certIdValue || !Number.isFinite(Number(certIdValue))) {
+    console.warn("Invalid certId in listing:", item);
+    return null; // Skip invalid listings
+  }
+
+  return {
+    certId: String(certIdValue),
+    supplier: item.supplierName || item.supplierWallet || "Unknown Supplier",
+    certification: item.feedstockType || "SAF",
+    price: Number(item.price || item.referencePricePerMT || item.bidPricePerMT || 0),
+    co2eReduction: Number(item.carbonIntensity || 0),
+    volume: Number(item.volume || item.availableQuantity || 0),
+    expiry: item.blockchainState === "LISTED" ? "LIVE" : item.blockchainState || "LISTED",
+    badge: item.blockchainState === "LISTED" ? "new" : null,
+    // Keep original data for debugging
+    _originalData: item
+  };
+};
 
 export default function AirlineMarketplace() {
   const [query, setQuery] = useState("");
@@ -80,13 +92,31 @@ export default function AirlineMarketplace() {
       ]);
 
       if (Array.isArray(listingRes?.data) && listingRes.data.length > 0) {
-        setListings(listingRes.data.map(mapListing));
+        // Map listings and filter out any that are invalid (null)
+        const mappedListings = listingRes.data
+          .map(mapListing)
+          .filter(item => item !== null); // Remove null entries from invalid mappings
+        
+        console.log(`Loaded ${listingRes.data.length} listings, ${mappedListings.length} valid`);
+        
+        if (mappedListings.length > 0) {
+          setListings(mappedListings);
+        } else {
+          console.warn("No valid listings after mapping");
+          setListings(fallbackListings);
+        }
+      } else {
+        console.warn("No listings returned from API, using fallback");
+        setListings(fallbackListings);
       }
 
       setMyBids(Array.isArray(bidRes?.data) ? bidRes.data : []);
       setError("");
     } catch (err) {
+      console.error("Error loading marketplace:", err);
       setError(err.message || "Unable to load marketplace data");
+      // Keep fallback listings visible on error
+      setListings(fallbackListings);
     } finally {
       setLoading(false);
     }
@@ -118,15 +148,21 @@ export default function AirlineMarketplace() {
   };
 
   const submitBid = async () => {
-    if (!selectedListing) return;
+    if (!selectedListing) {
+      setError("No listing selected. Please select a listing first.");
+      return;
+    }
 
-    const certId = Number(selectedListing.certId);
+    // Use certId from the mapped listing, ensuring it's a valid number
+    const certId = selectedListing.certId ? Number(selectedListing.certId) : null;
     const quantity = Number(bidQuantity);
     const price = Number(bidPrice);
-    const availableVolume = Number(selectedListing.volume);
+    const availableVolume = selectedListing.volume ? Number(selectedListing.volume) : 0;
+
+    console.log("Submitting bid:", { certId, quantity, price, availableVolume, selectedListing });
 
     if (!Number.isFinite(certId) || certId <= 0) {
-      setError("This listing is not ready for bidding yet. Please refresh marketplace data.");
+      setError(`This listing is not ready for bidding yet (Invalid ID: ${selectedListing.certId}). Please refresh marketplace data.`);
       return;
     }
 
@@ -147,12 +183,17 @@ export default function AirlineMarketplace() {
 
     try {
       setSubmittingBid(true);
+      console.log("Calling placeMarketplaceBid with:", { certId, quantity, price });
+      
+      // Note: walletAddress would be passed here if available from context/localStorage
       await placeMarketplaceBid({ certId, quantity, price });
+      
       setSelectedListing(null);
       await loadMarketplace();
       setShowMyBids(true);
       setError("");
     } catch (err) {
+      console.error("Bid submission error:", err);
       setError(err.message || "Bid submission failed");
     } finally {
       setSubmittingBid(false);

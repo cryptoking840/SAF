@@ -5,6 +5,15 @@ const { ethers } = require("ethers");
 
 const DEFAULT_BID_EXPIRY_HOURS = Number(process.env.DEFAULT_BID_EXPIRY_HOURS || 72);
 
+// ===== Error Sanitization Helper =====
+const sanitizeError = (err) => {
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  return {
+    message: isDevelopment ? err.message : 'Operation failed. Please try again.',
+    reason: isDevelopment ? (err.reason || err.shortMessage) : undefined
+  };
+};
+
 const statusLabel = {
   0: "REGISTERED",
   1: "INSPECTED",
@@ -168,6 +177,11 @@ exports.registerSAF = async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    const supplierWallet = process.env.SUPPLIER_ADDRESS;
+    if (!supplierWallet || !ethers.isAddress(supplierWallet)) {
+      return res.status(500).json({ error: "Invalid supplier wallet configuration" });
+    }
+
     const safDoc = await SAF.create({
       productionBatchId,
       productionDate,
@@ -175,7 +189,7 @@ exports.registerSAF = async (req, res) => {
       feedstockType,
       carbonIntensity,
       productionPathway,
-      supplierWallet: process.env.SUPPLIER_ADDRESS,
+      supplierWallet: supplierWallet.toLowerCase(),
       status: "SUBMITTED"
     });
 
@@ -302,7 +316,8 @@ exports.approveSAF = async (req, res) => {
 
   } catch (err) {
     console.error("REGISTRY APPROVAL ERROR:", err);
-    res.status(500).json({ error: err.message });
+    const sanitized = sanitizeError(err);
+    res.status(500).json({ error: sanitized.message });
   }
 };
 
@@ -322,7 +337,6 @@ exports.listCertificate = async (req, res) => {
     const certificateId = Number(certId);
     if (!Number.isFinite(certificateId) || certificateId <= 0) {
       return res.status(400).json({ error: "certId must be a positive number", receivedCertId: certId ?? null });
-      return res.status(400).json({ error: "certId must be a positive number", receivedCertId: rawCertificateId ?? null });
     }
 
     const supplierSigner = await getSupplierSignerForCertificate(certificateId, req);
@@ -355,41 +369,58 @@ exports.placeBid = async (req, res) => {
   try {
     const { certId, certificateId: certificateIdInput, quantity, price } = req.body;
 
+    // Add comprehensive logging for debugging
+    console.log("Place Bid Request:", { 
+      certId, 
+      certificateIdInput, 
+      quantity, 
+      price,
+      requestBody: JSON.stringify(req.body)
+    });
+
+    // Use certId first, then fall back to certificateIdInput
     const rawCertificateId = certId ?? certificateIdInput;
+    
+    // Validate certId exists
+    if (rawCertificateId === null || rawCertificateId === undefined || rawCertificateId === "") {
+      return res.status(400).json({ 
+        error: "Certificate ID is required. Please select a listing and try again.", 
+        code: "MISSING_CERT_ID"
+      });
+    }
+
     const certificateId = Number(rawCertificateId);
     const bidQuantity = Number(quantity);
     const bidPrice = Number(price);
 
+    console.log("Parsed values:", { certificateId, bidQuantity, bidPrice });
+
     if (!Number.isFinite(certificateId) || certificateId <= 0) {
-      return res.status(400).json({ error: "certId must be a positive number", receivedCertId: rawCertificateId ?? null });
+      return res.status(400).json({ 
+        error: `Invalid certificate ID: ${rawCertificateId}. Must be a positive number.`, 
+        receivedCertId: rawCertificateId ?? null,
+        code: "INVALID_CERT_ID"
+      });
     }
 
     if (!Number.isFinite(bidQuantity) || bidQuantity <= 0) {
-      return res.status(400).json({ error: "quantity must be a positive number" });
+      return res.status(400).json({ 
+        error: "Quantity must be a positive number greater than 0.",
+        code: "INVALID_QUANTITY"
+      });
     }
 
     if (!Number.isFinite(bidPrice) || bidPrice <= 0) {
-      return res.status(400).json({ error: "price must be a positive number" });
-    }
-
-    const certificateId = Number(certId);
-    const bidQuantity = Number(quantity);
-    const bidPrice = Number(price);
-
-    if (!Number.isFinite(certificateId) || certificateId <= 0) {
-      return res.status(400).json({ error: "certId must be a positive number" });
-    }
-
-    if (!Number.isFinite(bidQuantity) || bidQuantity <= 0) {
-      return res.status(400).json({ error: "quantity must be a positive number" });
-    }
-
-    if (!Number.isFinite(bidPrice) || bidPrice <= 0) {
-      return res.status(400).json({ error: "price must be a positive number" });
+      return res.status(400).json({ 
+        error: "Price must be a positive number greater than 0.",
+        code: "INVALID_PRICE"
+      });
     }
 
     const wallet = getWallet("AIRLINE");
     const airlineContract = contract.connect(wallet);
+
+    console.log(`Placing bid for certificate ${certificateId}: qty=${bidQuantity}, price=${bidPrice}`);
 
     const tx = await airlineContract.placeBid(
       BigInt(certificateId),
@@ -415,11 +446,14 @@ exports.placeBid = async (req, res) => {
       { upsert: true, new: true }
     );
 
+    console.log(`Bid placed successfully: bidId=${bidId}, certId=${certificateId}`);
+
     res.json({ message: "Bid Placed", txHash: tx.hash, bidId });
 
   } catch (err) {
     console.error("BID ERROR:", err);
-    res.status(500).json({ error: err.reason || err.shortMessage || err.message });
+    const sanitized = sanitizeError(err);
+    res.status(500).json({ error: sanitized.message });
   }
 };
 
@@ -461,7 +495,8 @@ exports.acceptBid = async (req, res) => {
 
   } catch (err) {
     console.error("ACCEPT BID ERROR:", err);
-    res.status(500).json({ error: err.message });
+    const sanitized = sanitizeError(err);
+    res.status(500).json({ error: sanitized.message });
   }
 };
 
@@ -511,7 +546,8 @@ exports.counterBid = async (req, res) => {
     });
   } catch (err) {
     console.error("COUNTER BID ERROR:", err);
-    res.status(500).json({ error: err.message });
+    const sanitized = sanitizeError(err);
+    res.status(500).json({ error: sanitized.message });
   }
 };
 
@@ -546,7 +582,8 @@ exports.denyBid = async (req, res) => {
     });
   } catch (err) {
     console.error("DENY BID ERROR:", err);
-    res.status(500).json({ error: err.message });
+    const sanitized = sanitizeError(err);
+    res.status(500).json({ error: sanitized.message });
   }
 };
 
@@ -651,14 +688,17 @@ exports.getMarketplaceListings = async (_req, res) => {
       const batch = await SAF.findOne({ certificateId: certId }).lean();
 
       listings.push({
-        certificateId: certId,
+        certId: certId,  // Changed from certificateId to certId for consistency
+        certificateId: certId,  // Keep both for backward compatibility
         supplierWallet: cert.owner,
         supplierName: formatWallet(cert.owner),
+        volume: Number(cert.remainingQuantity),  // Changed from availableQuantity to volume
         availableQuantity: Number(cert.remainingQuantity),
         originalQuantity: Number(cert.originalQuantity),
         productionBatchId: batch?.productionBatchId || `#${certId}`,
         feedstockType: batch?.feedstockType || "N/A",
-        carbonIntensity: batch?.carbonIntensity,
+        price: Number(batch?.referencePricePerMT) || 0,  // Add price if available
+        carbonIntensity: Number(batch?.carbonIntensity) || 0,
         blockchainState: statusLabel[Number(cert.status)] || "UNKNOWN",
       });
     }
