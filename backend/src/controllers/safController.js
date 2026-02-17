@@ -322,6 +322,7 @@ exports.listCertificate = async (req, res) => {
     const certificateId = Number(certId);
     if (!Number.isFinite(certificateId) || certificateId <= 0) {
       return res.status(400).json({ error: "certId must be a positive number", receivedCertId: certId ?? null });
+      return res.status(400).json({ error: "certId must be a positive number", receivedCertId: rawCertificateId ?? null });
     }
 
     const supplierSigner = await getSupplierSignerForCertificate(certificateId, req);
@@ -361,6 +362,22 @@ exports.placeBid = async (req, res) => {
 
     if (!Number.isFinite(certificateId) || certificateId <= 0) {
       return res.status(400).json({ error: "certId must be a positive number", receivedCertId: rawCertificateId ?? null });
+    }
+
+    if (!Number.isFinite(bidQuantity) || bidQuantity <= 0) {
+      return res.status(400).json({ error: "quantity must be a positive number" });
+    }
+
+    if (!Number.isFinite(bidPrice) || bidPrice <= 0) {
+      return res.status(400).json({ error: "price must be a positive number" });
+    }
+
+    const certificateId = Number(certId);
+    const bidQuantity = Number(quantity);
+    const bidPrice = Number(price);
+
+    if (!Number.isFinite(certificateId) || certificateId <= 0) {
+      return res.status(400).json({ error: "certId must be a positive number" });
     }
 
     if (!Number.isFinite(bidQuantity) || bidQuantity <= 0) {
