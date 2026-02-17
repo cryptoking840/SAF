@@ -37,6 +37,12 @@ export default function AppLayout({ children }) {
             icon="verified_user"
           />
 
+          <SidebarItem
+            to="/marketplace/incoming-bids"
+            label="Incoming Bids"
+            icon="fact_check"
+          />
+
           <div className="mt-auto">
             <SidebarItem
               to="/settings"
