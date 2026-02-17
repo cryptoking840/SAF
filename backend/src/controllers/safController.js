@@ -281,6 +281,15 @@ exports.listCertificate = async (req, res) => {
     const supplierSigner = await getSupplierSignerForCertificate(certificateId);
     const supplierContract = contract.connect(supplierSigner);
 
+
+    const certificateId = Number(certId);
+    if (!Number.isFinite(certificateId) || certificateId <= 0) {
+      return res.status(400).json({ error: "certId must be a positive number" });
+    }
+
+    const wallet = getWallet("SUPPLIER");
+    const supplierContract = contract.connect(wallet);
+
     const tx = await supplierContract.listCertificate(certificateId);
     await tx.wait();
 
