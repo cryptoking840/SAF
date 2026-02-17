@@ -244,13 +244,28 @@ exports.listCertificate = async (req, res) => {
   try {
     const { certId } = req.body;
 
+    if (certId === null || certId === undefined) {
+      return res.status(400).json({ error: "certId is required" });
+    }
+
+    const certificateId = Number(certId);
+    if (!Number.isFinite(certificateId) || certificateId <= 0) {
+      return res.status(400).json({ error: "certId must be a positive number" });
+    }
+
     const wallet = getWallet("SUPPLIER");
     const supplierContract = contract.connect(wallet);
 
-    const tx = await supplierContract.listCertificate(certId);
+    const tx = await supplierContract.listCertificate(certificateId);
     await tx.wait();
 
-    res.json({ message: "Listed Successfully", txHash: tx.hash });
+    await SAF.findOneAndUpdate(
+      { certificateId },
+      { status: "LISTED" },
+      { new: true }
+    );
+
+    res.json({ message: "Listed Successfully", txHash: tx.hash, certificateId });
 
   } catch (err) {
     console.error("LIST ERROR:", err);
