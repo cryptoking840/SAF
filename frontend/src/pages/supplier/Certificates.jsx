@@ -22,9 +22,7 @@ export default function Certificates() {
     try {
       setError("");
 
-      const res = await fetch(
-        "http://localhost:5000/api/saf/status?status=APPROVED"
-      );
+      const res = await fetch("http://localhost:5000/api/saf");
       const data = await res.json();
 
       if (!res.ok) {
@@ -33,6 +31,7 @@ export default function Certificates() {
 
       const approvedCertificates = data
         .filter((batch) => batch.certificateId !== null && batch.certificateId !== undefined)
+        .filter((batch) => batch.status === "APPROVED" || batch.status === "LISTED")
         .map((batch) => ({
           id: formatCertificateId(batch.certificateId),
           key: `${batch._id}-${batch.certificateId}`,

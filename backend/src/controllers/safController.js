@@ -77,6 +77,31 @@ const getWallet = (role) => {
   }
 };
 
+
+const getSupplierSignerForCertificate = async (certificateId) => {
+  const cert = await contract.certificates(certificateId);
+  const owner = String(cert.owner || "").toLowerCase();
+
+  if (!owner || owner === ethers.ZeroAddress) {
+    throw new Error("Certificate owner not found");
+  }
+
+  let privateKeyDirectory = {};
+  try {
+    privateKeyDirectory = JSON.parse(process.env.SUPPLIER_PRIVATE_KEYS || "{}");
+  } catch (_err) {
+    privateKeyDirectory = {};
+  }
+
+  const ownerPrivateKey = privateKeyDirectory[owner];
+
+  if (ownerPrivateKey) {
+    return new ethers.Wallet(ownerPrivateKey, provider);
+  }
+
+  return provider.getSigner(owner);
+};
+
 /*
 ====================================================
 SUPPLIER: Submit SAF (Mongo Only)
@@ -247,6 +272,15 @@ exports.listCertificate = async (req, res) => {
     if (certId === null || certId === undefined) {
       return res.status(400).json({ error: "certId is required" });
     }
+
+    const certificateId = Number(certId);
+    if (!Number.isFinite(certificateId) || certificateId <= 0) {
+      return res.status(400).json({ error: "certId must be a positive number" });
+    }
+
+    const supplierSigner = await getSupplierSignerForCertificate(certificateId);
+    const supplierContract = contract.connect(supplierSigner);
+
 
     const certificateId = Number(certId);
     if (!Number.isFinite(certificateId) || certificateId <= 0) {
