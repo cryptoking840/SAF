@@ -77,6 +77,31 @@ const getWallet = (role) => {
   }
 };
 
+
+const getSupplierSignerForCertificate = async (certificateId) => {
+  const cert = await contract.certificates(certificateId);
+  const owner = String(cert.owner || "").toLowerCase();
+
+  if (!owner || owner === ethers.ZeroAddress) {
+    throw new Error("Certificate owner not found");
+  }
+
+  let privateKeyDirectory = {};
+  try {
+    privateKeyDirectory = JSON.parse(process.env.SUPPLIER_PRIVATE_KEYS || "{}");
+  } catch (_err) {
+    privateKeyDirectory = {};
+  }
+
+  const ownerPrivateKey = privateKeyDirectory[owner];
+
+  if (ownerPrivateKey) {
+    return new ethers.Wallet(ownerPrivateKey, provider);
+  }
+
+  return provider.getSigner(owner);
+};
+
 /*
 ====================================================
 SUPPLIER: Submit SAF (Mongo Only)
@@ -244,13 +269,28 @@ exports.listCertificate = async (req, res) => {
   try {
     const { certId } = req.body;
 
-    const wallet = getWallet("SUPPLIER");
-    const supplierContract = contract.connect(wallet);
+    if (certId === null || certId === undefined) {
+      return res.status(400).json({ error: "certId is required" });
+    }
 
-    const tx = await supplierContract.listCertificate(certId);
+    const certIdNumber = Number(certId);
+    if (!Number.isFinite(certIdNumber) || certIdNumber <= 0) {
+      return res.status(400).json({ error: "certId must be a positive number" });
+    }
+
+    const supplierSigner = await getSupplierSignerForCertificate(certIdNumber);
+    const supplierContract = contract.connect(supplierSigner);
+
+    const tx = await supplierContract.listCertificate(certIdNumber);
     await tx.wait();
 
-    res.json({ message: "Listed Successfully", txHash: tx.hash });
+    await SAF.findOneAndUpdate(
+      { certificateId: certIdNumber },
+      { status: "LISTED" },
+      { new: true }
+    );
+
+    res.json({ message: "Listed Successfully", txHash: tx.hash, certificateId: certIdNumber });
 
   } catch (err) {
     console.error("LIST ERROR:", err);

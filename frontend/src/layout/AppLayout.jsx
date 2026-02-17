@@ -39,7 +39,7 @@ export default function AppLayout({ children }) {
 
           <SidebarItem
             to="/marketplace/incoming-bids"
-            label="Incoming Bids"
+            label="Bid Management"
             icon="fact_check"
           />
 
