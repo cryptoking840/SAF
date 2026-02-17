@@ -273,6 +273,20 @@ exports.listCertificate = async (req, res) => {
       return res.status(400).json({ error: "certId is required" });
     }
 
+    const certIdNumber = Number(certId);
+    if (!Number.isFinite(certIdNumber) || certIdNumber <= 0) {
+      return res.status(400).json({ error: "certId must be a positive number" });
+    }
+
+    const supplierSigner = await getSupplierSignerForCertificate(certIdNumber);
+    const supplierContract = contract.connect(supplierSigner);
+
+    const tx = await supplierContract.listCertificate(certIdNumber);
+    await tx.wait();
+
+    await SAF.findOneAndUpdate(
+      { certificateId: certIdNumber },
+
     const certificateId = Number(certId);
     if (!Number.isFinite(certificateId) || certificateId <= 0) {
       return res.status(400).json({ error: "certId must be a positive number" });
@@ -293,12 +307,13 @@ exports.listCertificate = async (req, res) => {
     const tx = await supplierContract.listCertificate(certificateId);
     await tx.wait();
 
-    await SAF.findOneAndUpdate(
+    await SAF.findOneAndUpdate(         
       { certificateId },
       { status: "LISTED" },
       { new: true }
     );
 
+    res.json({ message: "Listed Successfully", txHash: tx.hash, certificateId: certIdNumber });
     res.json({ message: "Listed Successfully", txHash: tx.hash, certificateId });
 
   } catch (err) {
