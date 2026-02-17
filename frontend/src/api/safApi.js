@@ -51,3 +51,10 @@ export const denyMarketplaceBid = async (bidId) => {
     body: JSON.stringify({ bidId }),
   });
 };
+
+export const listCertificateForSale = async (certId) => {
+  return request("/saf/list", {
+    method: "POST",
+    body: JSON.stringify({ certId }),
+  });
+};

@@ -41,6 +41,7 @@ export default function SupplierDashboard() {
         batch.status === "PENDING_BLOCKCHAIN"
     ).length;
     const approvedCount = batches.filter((batch) => batch.status === "APPROVED").length;
+    const listedCount = batches.filter((batch) => batch.status === "LISTED").length;
     const carbonReduction = totalQuantity * 3;
 
     const statusMap = {
@@ -48,6 +49,7 @@ export default function SupplierDashboard() {
       INSPECTED: 0,
       SUBMITTED: 0,
       REJECTED: 0,
+      LISTED: 0,
     };
 
     batches.forEach((batch) => {
@@ -78,6 +80,7 @@ export default function SupplierDashboard() {
       totalRevenue: totalQuantity * PRICE_PER_MT,
       carbonReduction,
       approvedCount,
+      listedCount,
       statusMap,
       activity,
     };
@@ -112,7 +115,7 @@ export default function SupplierDashboard() {
           title="Total SAF Produced"
           value={isLoading ? "..." : metrics.totalQuantity.toLocaleString()}
           suffix="MT"
-          trend={`${metrics.approvedCount} approved`}
+          trend={`${metrics.approvedCount} approved · ${metrics.listedCount} listed`}
         />
 
         <KpiCard
@@ -161,6 +164,7 @@ export default function SupplierDashboard() {
           <StatusRow label="Inspected" value={metrics.statusMap.INSPECTED} color="bg-blue-400" />
           <StatusRow label="Submitted" value={metrics.statusMap.SUBMITTED} color="bg-amber-400" />
           <StatusRow label="Rejected" value={metrics.statusMap.REJECTED} color="bg-red-300" />
+          <StatusRow label="Listed" value={metrics.statusMap.LISTED} color="bg-primary" />
         </div>
       </div>
 
@@ -285,6 +289,9 @@ function formatTimestamp(value) {
 function getActivityLabel(status) {
   if (status === "APPROVED") {
     return "Batch Certified";
+  }
+  if (status === "LISTED") {
+    return "Listed on Marketplace";
   }
   if (status === "INSPECTED") {
     return "Inspection Completed";

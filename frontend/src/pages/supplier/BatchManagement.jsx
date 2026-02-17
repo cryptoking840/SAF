@@ -222,6 +222,7 @@ function StatusBadge({ status }) {
     APPROVED: { label: "Approved", style: "bg-primary/20 text-green-700" },
     REJECTED: { label: "Rejected", style: "bg-red-100 text-red-700" },
     PENDING_BLOCKCHAIN: { label: "Pending", style: "bg-gray-100 text-gray-600" },
+    LISTED: { label: "Listed", style: "bg-primary/20 text-green-700" },
   };
 
   const config = map[status] || { label: status || "Unknown", style: "bg-gray-200 text-gray-600" };

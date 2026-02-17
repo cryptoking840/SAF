@@ -22,9 +22,7 @@ export default function Certificates() {
     try {
       setError("");
 
-      const res = await fetch(
-        "http://localhost:5000/api/saf/status?status=APPROVED"
-      );
+      const res = await fetch("http://localhost:5000/api/saf");
       const data = await res.json();
 
       if (!res.ok) {
@@ -33,13 +31,14 @@ export default function Certificates() {
 
       const approvedCertificates = data
         .filter((batch) => batch.certificateId !== null && batch.certificateId !== undefined)
+        .filter((batch) => batch.status === "APPROVED" || batch.status === "LISTED")
         .map((batch) => ({
           id: formatCertificateId(batch.certificateId),
           key: `${batch._id}-${batch.certificateId}`,
           batchId: batch.productionBatchId,
           issueDate: new Date(batch.updatedAt).toLocaleDateString(),
           quantity: batch.quantity,
-          status: "Certified",
+          status: batch.status === "LISTED" ? "Listed for Sale" : "Certified",
           txHash: batch.txHash,
         }));
 
@@ -118,7 +117,7 @@ export default function Certificates() {
                   <td className="px-6 py-4">{cert.batchId}</td>
                   <td className="px-6 py-4">{cert.issueDate}</td>
                   <td className="px-6 py-4 text-right">{cert.quantity}</td>
-                  <td className="px-6 py-4">{cert.status}</td>
+                  <td className="px-6 py-4"><CertificateStatusBadge status={cert.status} /></td>
                 </tr>
               ))
             )}
@@ -135,5 +134,15 @@ export default function Certificates() {
         )}
       </Modal>
     </AppLayout>
+  );
+}
+
+
+function CertificateStatusBadge({ status }) {
+  const listed = status === "Listed for Sale";
+  return (
+    <span className={`px-3 py-1 text-xs rounded-full font-bold ${listed ? "bg-primary/20 text-green-700" : "bg-blue-100 text-blue-700"}`}>
+      {status}
+    </span>
   );
 }
