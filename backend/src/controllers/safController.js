@@ -354,21 +354,41 @@ exports.placeBid = async (req, res) => {
   try {
     const { certId, quantity, price } = req.body;
 
+    const certificateId = Number(certId);
+    const bidQuantity = Number(quantity);
+    const bidPrice = Number(price);
+
+    if (!Number.isFinite(certificateId) || certificateId <= 0) {
+      return res.status(400).json({ error: "certId must be a positive number" });
+    }
+
+    if (!Number.isFinite(bidQuantity) || bidQuantity <= 0) {
+      return res.status(400).json({ error: "quantity must be a positive number" });
+    }
+
+    if (!Number.isFinite(bidPrice) || bidPrice <= 0) {
+      return res.status(400).json({ error: "price must be a positive number" });
+    }
+
     const wallet = getWallet("AIRLINE");
     const airlineContract = contract.connect(wallet);
 
-    const tx = await airlineContract.placeBid(certId, quantity, price);
+    const tx = await airlineContract.placeBid(
+      BigInt(certificateId),
+      BigInt(bidQuantity),
+      BigInt(bidPrice)
+    );
     await tx.wait();
 
     const bidId = Number(await airlineContract.bidCounter());
 
-    const cert = await airlineContract.certificates(certId);
+    const cert = await airlineContract.certificates(certificateId);
 
     await Bid.findOneAndUpdate(
       { bidId },
       {
         bidId,
-        certificateId: Number(certId),
+        certificateId,
         supplierWallet: cert.owner,
         airlineWallet: wallet.address,
         status: "Pending",
@@ -381,7 +401,7 @@ exports.placeBid = async (req, res) => {
 
   } catch (err) {
     console.error("BID ERROR:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.reason || err.shortMessage || err.message });
   }
 };
 
