@@ -25,6 +25,24 @@ export const registerSAF = async (payload) => {
   });
 };
 
+export const fetchMarketplaceListings = async () => {
+  return request("/marketplace/listings");
+};
+
+export const fetchMyBids = async (walletAddress) => {
+  return request("/marketplace/my-bids", {
+    headers: walletAddress ? { "x-wallet-address": walletAddress } : undefined,
+  });
+};
+
+export const placeMarketplaceBid = async ({ certId, quantity, price, walletAddress }) => {
+  return request("/saf/bid", {
+    method: "POST",
+    headers: walletAddress ? { "x-wallet-address": walletAddress } : undefined,
+    body: JSON.stringify({ certId, quantity, price }),
+  });
+};
+
 export const fetchIncomingBids = async (walletAddress) => {
   return request("/marketplace/incoming-bids", {
     headers: walletAddress ? { "x-wallet-address": walletAddress } : undefined,
