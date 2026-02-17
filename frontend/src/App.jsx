@@ -14,6 +14,7 @@ import RetirementApprovals from "./pages/registry/RetirementApprovals";
 import BatchApprovals from "./pages/registry/BatchApprovals";
 import ParticipantApprovals from "./pages/registry/ParticipantApprovals";
 import IncomingBids from "./pages/IncomingBids";
+import AirlineMarketplace from "./pages/airline/AirlineMarketplace";
 
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
         <Route path="/batches" element={<BatchManagement />} />
         <Route path="/certificates" element={<Certificates />} />
         <Route path="/marketplace/incoming-bids" element={<IncomingBids />} />
+        <Route path="/marketplace" element={<AirlineMarketplace />} />
 
         {/* Inspector Routes */}
         <Route path="/inspector" element={<InspectorDashboard />} />
