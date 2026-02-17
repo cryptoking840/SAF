@@ -27,11 +27,22 @@ const resolveSupplierWallet = (req) => {
 };
 
 const resolveAirlineWallet = (req) => {
+  let walletFromPrivateKey = "";
+
+  try {
+    if (process.env.PRIVATE_KEY_AIRLINE) {
+      walletFromPrivateKey = new ethers.Wallet(process.env.PRIVATE_KEY_AIRLINE).address;
+    }
+  } catch (_err) {
+    walletFromPrivateKey = "";
+  }
+
   return (
     req.user?.walletAddress ||
     req.headers["x-wallet-address"] ||
     req.headers["x-airline-wallet"] ||
     process.env.AIRLINE_ADDRESS ||
+    walletFromPrivateKey ||
     ""
   );
 };
