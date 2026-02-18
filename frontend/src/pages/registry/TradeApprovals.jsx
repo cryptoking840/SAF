@@ -1,84 +1,70 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import RegistryLayout from "../../layout/RegistryLayout";
-
-const trades = [
-  {
-    id: "SAF-2023-001",
-    seller: "EcoFuel Global",
-    buyer: "SkyHigh Airways",
-    quantity: 5000,
-    value: 250000,
-    impact: "4,200 tCO2e",
-    hash: "0x892ad777bc3d9e4f2a1b0c7",
-    sellerWallet: "addr1qx...9h4k2",
-    buyerWallet: "addr1z8...m0p1q",
-    documents: [
-      "Verification_Report_SAF001.pdf",
-      "Sustainability_Cert_2023.pdf",
-      "Origin_Certificate_EU_v4.pdf",
-    ],
-  },
-  {
-    id: "SAF-2023-002",
-    seller: "BioEnergy Corp",
-    buyer: "Global Connect",
-    quantity: 12000,
-    value: 600000,
-    impact: "10,100 tCO2e",
-    hash: "0x11aaef9b9982dd7aa3f05b9",
-    sellerWallet: "addr1pq...4n0xd",
-    buyerWallet: "addr1uw...h6s8z",
-    documents: ["Inspection_Evidence_002.pdf", "Registry_Checklist_002.pdf"],
-  },
-  {
-    id: "SAF-2023-003",
-    seller: "GreenRefine",
-    buyer: "EuroFlight",
-    quantity: 2500,
-    value: 125000,
-    impact: "2,100 tCO2e",
-    hash: "0x7f4429acc99001aa448e2cc",
-    sellerWallet: "addr1gh...2s18w",
-    buyerWallet: "addr1lk...h920p",
-    documents: ["Traceability_Log_003.pdf", "Declaration_003.pdf"],
-  },
-  {
-    id: "SAF-2023-004",
-    seller: "SustainablePower",
-    buyer: "Pacific Aero",
-    quantity: 8200,
-    value: 410000,
-    impact: "6,900 tCO2e",
-    hash: "0x3e88bc99fd0aafcc2719ad2",
-    sellerWallet: "addr1we...5tx4z",
-    buyerWallet: "addr1da...9ep2v",
-    documents: ["Compliance_Packet_004.pdf"],
-  },
-];
+import { fetchPendingTradeApprovals, approveTrade } from "../../api/safApi";
 
 export default function TradeApprovals() {
+  const [trades, setTrades] = useState([]);
   const [selected, setSelected] = useState(0);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
   const [toast, setToast] = useState("");
+  const [approving, setApproving] = useState(false);
+
+  const loadTrades = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const result = await fetchPendingTradeApprovals();
+      setTrades(Array.isArray(result?.data) ? result.data : []);
+    } catch (err) {
+      console.error("Error loading trades:", err);
+      setError(err.message || "Failed to load pending trades");
+      setTrades([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTrades();
+  }, []);
 
   const filteredTrades = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return trades;
 
     return trades.filter((trade) =>
-      [trade.id, trade.seller, trade.buyer].some((field) =>
-        field.toLowerCase().includes(query)
-      )
+      [
+        String(trade.bidId),
+        String(trade.certificateId),
+        trade.sellerName.toLowerCase(),
+        trade.buyerName.toLowerCase(),
+        trade.batchId.toLowerCase(),
+      ].some((field) => field.includes(query))
     );
-  }, [search]);
+  }, [search, trades]);
 
   const activeTrade = filteredTrades[selected] || filteredTrades[0];
 
-  const handleApprove = () => {
-    setShowConfirm(false);
-    setToast(`${activeTrade.id} approved. Transfer is being finalized on-chain.`);
-    setTimeout(() => setToast(""), 3000);
+  const handleApprove = async () => {
+    if (!activeTrade) return;
+
+    try {
+      setApproving(true);
+      await approveTrade(activeTrade.bidId);
+      setShowConfirm(false);
+      setToast(`Trade #${activeTrade.bidId} approved and recorded on-chain. Certificate transferred to airline.`);
+      setTimeout(() => setToast(""), 4000);
+      await loadTrades();
+      setSelected(0);
+    } catch (err) {
+      console.error("Approval error:", err);
+      setError(err.message || "Failed to approve trade");
+    } finally {
+      setApproving(false);
+    }
   };
 
   return (
@@ -103,126 +89,131 @@ export default function TradeApprovals() {
                   setSearch(event.target.value);
                   setSelected(0);
                 }}
-                placeholder="Search certificates..."
+                placeholder="Search by ID, certificate, or wallet..."
                 className="w-64 rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm focus:border-primary focus:outline-none"
               />
             </div>
 
-            <button className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/20">
+            <button
+              onClick={loadTrades}
+              className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/20"
+            >
               <span className="material-symbols-outlined text-sm">refresh</span>
               Refresh List
             </button>
           </div>
         </header>
 
-        <div className="flex flex-col gap-6 xl:flex-row">
-          <div className="flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
-                  <th className="px-6 py-4">Certificate ID</th>
-                  <th className="px-6 py-4">Seller</th>
-                  <th className="px-6 py-4">Buyer</th>
-                  <th className="px-6 py-4 text-right">Quantity (MT)</th>
-                  <th className="px-6 py-4 text-right">Value</th>
-                  <th className="px-6 py-4 text-right">Impact</th>
-                  <th className="px-6 py-4 text-center">Status</th>
-                </tr>
-              </thead>
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
-              <tbody className="divide-y divide-slate-100">
-                {filteredTrades.map((trade, index) => (
-                  <tr
-                    key={trade.id}
-                    onClick={() => setSelected(index)}
-                    className={`cursor-pointer transition-colors ${
-                      activeTrade?.id === trade.id
-                        ? "border-l-4 border-l-primary bg-primary/5"
-                        : "hover:bg-slate-50"
-                    }`}
-                  >
-                    <td className="px-6 py-4 font-mono text-sm font-bold">{trade.id}</td>
-                    <td className="px-6 py-4 text-sm">{trade.seller}</td>
-                    <td className="px-6 py-4 text-sm">{trade.buyer}</td>
-                    <td className="px-6 py-4 text-right text-sm font-medium">
-                      {trade.quantity.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-right text-sm font-medium">
-                      ${trade.value.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-right text-sm font-bold text-primary">
-                      {trade.impact}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-                        Pending Registry
-                      </span>
-                    </td>
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+            Loading pending trades...
+          </div>
+        ) : filteredTrades.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+            No pending trades awaiting registry approval.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-6 xl:flex-row">
+            <div className="flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                    <th className="px-6 py-4">Bid ID</th>
+                    <th className="px-6 py-4">Certificate</th>
+                    <th className="px-6 py-4">Seller</th>
+                    <th className="px-6 py-4">Buyer</th>
+                    <th className="px-6 py-4 text-right">Quantity (MT)</th>
+                    <th className="px-6 py-4 text-right">Value</th>
+                    <th className="px-6 py-4 text-right">Impact</th>
+                    <th className="px-6 py-4 text-center">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
 
-            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
-              <p className="text-xs text-slate-500">
-                Showing {Math.min(filteredTrades.length, 4)} of {filteredTrades.length} pending transfers
-              </p>
-              <div className="flex gap-2">
-                <button className="rounded border border-slate-200 bg-white px-3 py-1 text-xs">Previous</button>
-                <button className="rounded border border-slate-200 bg-white px-3 py-1 text-xs">Next</button>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredTrades.map((trade, index) => (
+                    <tr
+                      key={trade.bidId}
+                      onClick={() => setSelected(index)}
+                      className={`cursor-pointer transition-colors ${
+                        activeTrade?.bidId === trade.bidId
+                          ? "border-l-4 border-l-primary bg-primary/5"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <td className="px-6 py-4 font-mono text-sm font-bold">#{trade.bidId}</td>
+                      <td className="px-6 py-4 text-sm">{trade.certificateId}</td>
+                      <td className="px-6 py-4 text-sm">{trade.sellerName}</td>
+                      <td className="px-6 py-4 text-sm">{trade.buyerName}</td>
+                      <td className="px-6 py-4 text-right text-sm font-medium">
+                        {trade.quantity.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-medium">
+                        ${trade.totalValue.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-bold text-primary">
+                        {trade.impact.toLocaleString()} tCO₂e
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                          Pending Registry
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
+                <p className="text-xs text-slate-500">
+                  Showing {Math.min(filteredTrades.length, 10)} of {filteredTrades.length} pending transfers
+                </p>
               </div>
             </div>
-          </div>
 
-          {activeTrade && (
-            <aside className="w-full max-w-md space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div>
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-base font-bold">Blockchain Verification</h3>
-                  <span className="material-symbols-outlined text-primary">verified</span>
+            {activeTrade && (
+              <aside className="w-full max-w-md space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div>
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-base font-bold">Trade Details</h3>
+                    <span className="material-symbols-outlined text-primary">info</span>
+                  </div>
+                  <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <InfoLine label="Bid ID" value={`#${activeTrade.bidId}`} />
+                    <InfoLine label="Certificate ID" value={String(activeTrade.certificateId)} />
+                    <InfoLine label="Quantity" value={`${activeTrade.quantity.toLocaleString()} MT`} />
+                    <InfoLine label="Price per MT" value={`$${activeTrade.pricePerMT.toLocaleString()}`} />
+                    <InfoLine label="Total Value" value={`$${activeTrade.totalValue.toLocaleString()}`} />
+                    <InfoLine label="CO₂e Impact" value={`${activeTrade.impact.toLocaleString()} tCO₂e`} />
+                    <InfoLine label="Feedstock Type" value={activeTrade.feedstockType} />
+                  </div>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Reference Hash</p>
-                  <code className="text-xs text-slate-600">{activeTrade.hash}</code>
+
+                <div className="space-y-3">
+                  <h3 className="border-b border-slate-100 pb-2 text-sm font-bold">Wallet Addresses</h3>
+                  <InfoLine label="Seller (Supplier)" value={activeTrade.sellerWallet} icon="arrow_outward" />
+                  <InfoLine label="Buyer (Airline)" value={activeTrade.buyerWallet} icon="arrow_downward" />
                 </div>
-              </div>
 
-              <div className="space-y-3">
-                <h3 className="border-b border-slate-100 pb-2 text-sm font-bold">Wallet Addresses</h3>
-                <InfoLine label="Seller (Sender)" value={activeTrade.sellerWallet} icon="arrow_outward" />
-                <InfoLine label="Buyer (Receiver)" value={activeTrade.buyerWallet} icon="arrow_downward" />
-              </div>
-
-              <div className="space-y-3">
-                <h3 className="border-b border-slate-100 pb-2 text-sm font-bold">Supporting Documents</h3>
-                {activeTrade.documents.map((doc) => (
+                <div className="space-y-3 border-t border-slate-200 pt-6">
                   <button
-                    key={doc}
-                    className="flex w-full items-center gap-2 rounded p-2 text-left text-xs hover:bg-slate-50"
+                    onClick={() => setShowConfirm(true)}
+                    disabled={approving}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 font-bold text-background-dark disabled:opacity-50"
                   >
-                    <span className="material-symbols-outlined text-slate-400">description</span>
-                    <span className="flex-1 truncate">{doc}</span>
-                    <span className="material-symbols-outlined text-slate-300 text-sm">open_in_new</span>
+                    <span className="material-symbols-outlined">check_circle</span>
+                    {approving ? "Processing..." : "Approve & Record on Chain"}
                   </button>
-                ))}
-              </div>
-
-              <div className="space-y-3 border-t border-slate-200 pt-6">
-                <button
-                  onClick={() => setShowConfirm(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 font-bold text-background-dark"
-                >
-                  <span className="material-symbols-outlined">check_circle</span>
-                  Approve Transfer
-                </button>
-                <button className="flex w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 py-3 font-bold text-rose-600">
-                  <span className="material-symbols-outlined">cancel</span>
-                  Reject Transfer
-                </button>
-              </div>
-            </aside>
-          )}
-        </div>
+                </div>
+              </aside>
+            )}
+          </div>
+        )}
       </div>
 
       {showConfirm && activeTrade && (
@@ -233,28 +224,35 @@ export default function TradeApprovals() {
                 <span className="material-symbols-outlined">help</span>
               </div>
               <div>
-                <h4 className="text-lg font-bold">Confirm Transfer Approval</h4>
-                <p className="text-sm text-slate-500">Certificate {activeTrade.id}</p>
+                <h4 className="text-lg font-bold">Confirm Trade Approval</h4>
+                <p className="text-sm text-slate-500">Bid #{activeTrade.bidId}</p>
               </div>
             </div>
 
             <p className="mb-6 text-sm text-slate-600">
-              Approving this transfer will permanently record the transaction on-chain and update buyer
-              compliance balances.
+              Approving this transfer will:
+              <ul className="mt-2 ml-4 space-y-1 text-xs">
+                <li>✓ Record the transaction on-chain</li>
+                <li>✓ Create new certificate in airline wallet</li>
+                <li>✓ Update supplier's remaining balance</li>
+                <li>✓ Complete the SAF trade</li>
+              </ul>
             </p>
 
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 rounded-lg bg-slate-100 py-2.5 text-sm font-bold"
+                disabled={approving}
+                className="flex-1 rounded-lg bg-slate-100 py-2.5 text-sm font-bold disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleApprove}
-                className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-bold text-background-dark"
+                disabled={approving}
+                className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-bold text-background-dark disabled:opacity-50"
               >
-                Confirm Approval
+                {approving ? "Processing..." : "Confirm Approval"}
               </button>
             </div>
           </div>
@@ -275,9 +273,10 @@ function InfoLine({ label, value, icon }) {
     <div>
       <p className="text-[10px] font-bold uppercase text-slate-500">{label}</p>
       <div className="mt-1 flex items-center gap-2">
-        <span className="material-symbols-outlined text-sm text-slate-400">{icon}</span>
-        <span className="font-mono text-xs text-slate-600">{value}</span>
+        {icon && <span className="material-symbols-outlined text-sm text-slate-400">{icon}</span>}
+        <span className="font-mono text-xs text-slate-600 break-all">{value}</span>
       </div>
     </div>
   );
 }
+

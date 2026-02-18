@@ -370,13 +370,9 @@ exports.placeBid = async (req, res) => {
     const { certId, certificateId: certificateIdInput, quantity, price } = req.body;
 
     // Add comprehensive logging for debugging
-    console.log("Place Bid Request:", { 
-      certId, 
-      certificateIdInput, 
-      quantity, 
-      price,
-      requestBody: JSON.stringify(req.body)
-    });
+    console.log("=== Place Bid Request ===");
+    console.log("Request body:", JSON.stringify(req.body, null, 2));
+    console.log("Extracted values:", { certId, certificateIdInput, quantity, price });
 
     // Use certId first, then fall back to certificateIdInput
     const rawCertificateId = certId ?? certificateIdInput;
@@ -385,7 +381,8 @@ exports.placeBid = async (req, res) => {
     if (rawCertificateId === null || rawCertificateId === undefined || rawCertificateId === "") {
       return res.status(400).json({ 
         error: "Certificate ID is required. Please select a listing and try again.", 
-        code: "MISSING_CERT_ID"
+        code: "MISSING_CERT_ID",
+        receivedBody: req.body
       });
     }
 
@@ -393,7 +390,7 @@ exports.placeBid = async (req, res) => {
     const bidQuantity = Number(quantity);
     const bidPrice = Number(price);
 
-    console.log("Parsed values:", { certificateId, bidQuantity, bidPrice });
+    console.log("Parsed numeric values:", { certificateId, bidQuantity, bidPrice });
 
     if (!Number.isFinite(certificateId) || certificateId <= 0) {
       return res.status(400).json({ 
@@ -406,14 +403,16 @@ exports.placeBid = async (req, res) => {
     if (!Number.isFinite(bidQuantity) || bidQuantity <= 0) {
       return res.status(400).json({ 
         error: "Quantity must be a positive number greater than 0.",
-        code: "INVALID_QUANTITY"
+        code: "INVALID_QUANTITY",
+        received: bidQuantity
       });
     }
 
     if (!Number.isFinite(bidPrice) || bidPrice <= 0) {
       return res.status(400).json({ 
         error: "Price must be a positive number greater than 0.",
-        code: "INVALID_PRICE"
+        code: "INVALID_PRICE",
+        received: bidPrice
       });
     }
 
@@ -446,12 +445,12 @@ exports.placeBid = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    console.log(`Bid placed successfully: bidId=${bidId}, certId=${certificateId}`);
+    console.log(`✅ Bid placed successfully: bidId=${bidId}, certId=${certificateId}`);
 
     res.json({ message: "Bid Placed", txHash: tx.hash, bidId });
 
   } catch (err) {
-    console.error("BID ERROR:", err);
+    console.error("❌ BID ERROR:", err);
     const sanitized = sanitizeError(err);
     res.status(500).json({ error: sanitized.message });
   }
@@ -620,22 +619,35 @@ exports.getIncomingBids = async (req, res) => {
 
       const batch = await SAF.findOne({ certificateId: certId }).lean();
 
-      const bidDoc = await Bid.findOneAndUpdate(
-        { bidId },
-        {
+      // Get existing bid or create new
+      let bidDoc = await Bid.findOne({ bidId });
+      
+      if (!bidDoc) {
+        // New bid - create with initial status
+        bidDoc = await Bid.create({
           bidId,
           certificateId: certId,
           supplierWallet,
           airlineWallet: blockchainBid.airline,
           status: blockchainBid.accepted ? "Accepted" : "Pending",
           expiryAt: new Date(Date.now() + DEFAULT_BID_EXPIRY_HOURS * 60 * 60 * 1000),
-        },
-        {
-          upsert: true,
-          new: true,
-          setDefaultsOnInsert: true,
+        });
+      } else {
+        // Existing bid - only update if Accepted on blockchain, preserve Countered/Denied
+        const updateData = {
+          certificateId: certId,
+          supplierWallet,
+          airlineWallet: blockchainBid.airline,
+          expiryAt: new Date(Date.now() + DEFAULT_BID_EXPIRY_HOURS * 60 * 60 * 1000),
+        };
+        
+        // Only update status if accepted on blockchain
+        if (blockchainBid.accepted) {
+          updateData.status = "Accepted";
         }
-      );
+        
+        bidDoc = await Bid.findOneAndUpdate({ bidId }, updateData, { new: true });
+      }
 
       const status = normalizeBidState(bidDoc, blockchainBid);
 
@@ -655,6 +667,7 @@ exports.getIncomingBids = async (req, res) => {
         volume,
         totalValue: (bidDoc.counterPrice || pricePerMT) * volume,
         status,
+        approvedByRegistry: bidDoc.approvedByRegistry || blockchainBid.approvedByRegistry || false,
         bidExpiryDate: bidDoc.expiryAt,
         createdTimestamp: bidDoc.createdAt,
         blockchainState: statusLabel[Number(cert.status)] || "UNKNOWN",
@@ -740,22 +753,35 @@ exports.getMyBids = async (req, res) => {
       const certId = Number(blockchainBid.certificateId);
       const cert = await contract.certificates(certId);
 
-      const bidDoc = await Bid.findOneAndUpdate(
-        { bidId },
-        {
+      // Get existing bid or create new
+      let bidDoc = await Bid.findOne({ bidId });
+      
+      if (!bidDoc) {
+        // New bid - create with initial status
+        bidDoc = await Bid.create({
           bidId,
           certificateId: certId,
           supplierWallet: cert.owner,
           airlineWallet: blockchainBid.airline,
           status: blockchainBid.accepted ? "Accepted" : "Pending",
           expiryAt: new Date(Date.now() + DEFAULT_BID_EXPIRY_HOURS * 60 * 60 * 1000),
-        },
-        {
-          upsert: true,
-          new: true,
-          setDefaultsOnInsert: true,
+        });
+      } else {
+        // Existing bid - only update if Accepted on blockchain, preserve Countered/Denied
+        const updateData = {
+          certificateId: certId,
+          supplierWallet: cert.owner,
+          airlineWallet: blockchainBid.airline,
+          expiryAt: new Date(Date.now() + DEFAULT_BID_EXPIRY_HOURS * 60 * 60 * 1000),
+        };
+        
+        // Only update status if accepted on blockchain
+        if (blockchainBid.accepted) {
+          updateData.status = "Accepted";
         }
-      );
+        
+        bidDoc = await Bid.findOneAndUpdate({ bidId }, updateData, { new: true });
+      }
 
       const status = normalizeBidState(bidDoc, blockchainBid);
 
@@ -773,6 +799,7 @@ exports.getMyBids = async (req, res) => {
         originalPricePerMT: Number(blockchainBid.price),
         bidPricePerMT: bidDoc.counterPrice || Number(blockchainBid.price),
         status,
+        approvedByRegistry: bidDoc.approvedByRegistry || blockchainBid.approvedByRegistry || false,
         submittedAt: bidDoc.createdAt,
         expiryAt: bidDoc.expiryAt,
       });
@@ -787,6 +814,60 @@ exports.getMyBids = async (req, res) => {
 
 /*
 ====================================================
+FETCH PENDING TRADES FOR REGISTRY APPROVAL
+====================================================
+*/
+exports.getPendingTradeApprovals = async (_req, res) => {
+  try {
+    const totalBids = Number(await contract.bidCounter());
+    const trades = [];
+
+    for (let bidId = 1; bidId <= totalBids; bidId += 1) {
+      const blockchainBid = await contract.bids(bidId);
+
+      if (Number(blockchainBid.id) === 0) {
+        continue;
+      }
+
+      // Only include bids that are accepted by supplier but not approved by registry
+      if (!blockchainBid.accepted || blockchainBid.approvedByRegistry) {
+        continue;
+      }
+
+      const certId = Number(blockchainBid.certificateId);
+      const cert = await contract.certificates(certId);
+
+      const batch = await SAF.findOne({ certificateId: certId }).lean();
+      const bidDoc = await Bid.findOne({ bidId }).lean();
+
+      trades.push({
+        bidId,
+        certificateId: certId,
+        quantity: Number(blockchainBid.quantity),
+        pricePerMT: Number(blockchainBid.price),
+        totalValue: Number(blockchainBid.quantity) * Number(blockchainBid.price),
+        sellerWallet: cert.owner,
+        sellerName: formatWallet(cert.owner),
+        buyerWallet: blockchainBid.airline,
+        buyerName: getAirlineName(blockchainBid.airline),
+        batchId: batch?.productionBatchId || `#${certId}`,
+        feedstockType: batch?.feedstockType || "N/A",
+        carbonIntensity: batch?.carbonIntensity || 0,
+        impact: Math.round(Number(blockchainBid.quantity) * 0.84), // Rough CO2e reduction calculation
+        blockchainState: statusLabel[Number(cert.status)] || "UNKNOWN",
+        submittedAt: bidDoc?.createdAt || new Date(),
+      });
+    }
+
+    res.json({ success: true, data: trades });
+  } catch (err) {
+    console.error("FETCH PENDING TRADES ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/*
+====================================================
 APPROVE TRADE (Registry Only)
 ====================================================
 */
@@ -794,17 +875,76 @@ exports.approveTrade = async (req, res) => {
   try {
     const { bidId } = req.body;
 
+    if (!bidId) {
+      return res.status(400).json({ error: "bidId is required" });
+    }
+
+    console.log(`\n=== APPROVING TRADE ===`);
+    console.log(`Bid ID: ${bidId}`);
+
+    const blockchainBid = await contract.bids(bidId);
+
+    if (Number(blockchainBid.id) === 0) {
+      return res.status(400).json({ error: "Bid not found" });
+    }
+
+    if (!blockchainBid.accepted) {
+      return res.status(400).json({ error: "Bid must be accepted by supplier before registry approval" });
+    }
+
+    if (blockchainBid.approvedByRegistry) {
+      return res.status(400).json({ error: "Bid has already been approved by registry" });
+    }
+
+    const certId = Number(blockchainBid.certificateId);
+    const cert = await contract.certificates(certId);
+    const oldOwner = cert.owner;
+    const newOwner = blockchainBid.airline;
+    const quantity = Number(blockchainBid.quantity);
+
+    console.log(`Certificate: ${certId}`);
+    console.log(`Supplier (From): ${oldOwner}`);
+    console.log(`Airline (To): ${newOwner}`);
+    console.log(`Quantity: ${quantity} MT`);
+
     const wallet = getWallet("REGISTRY");
     const registryContract = contract.connect(wallet);
 
     const tx = await registryContract.approveTrade(bidId);
-    await tx.wait();
+    const receipt = await tx.wait();
 
-    res.json({ message: "Trade Approved", txHash: tx.hash });
+    console.log(`✅ Trade approved on-chain`);
+    console.log(`Transaction Hash: ${tx.hash}`);
+    console.log(`Gas Used: ${receipt.gasUsed.toString()}`);
+    console.log(`Block: ${receipt.blockNumber}`);
 
+    // Update bid document in MongoDB
+    await Bid.findOneAndUpdate(
+      { bidId: Number(bidId) },
+      {
+        status: "Accepted",
+        approvedByRegistry: true,
+      },
+      { new: true }
+    );
+
+    console.log(`✅ Trade recorded in MongoDB`);
+
+    res.json({
+      message: "Trade Approved",
+      data: {
+        bidId: Number(bidId),
+        certificateId: certId,
+        supplier: oldOwner,
+        airline: newOwner,
+        quantity,
+        txHash: tx.hash,
+      },
+    });
   } catch (err) {
-    console.error("APPROVE TRADE ERROR:", err);
-    res.status(500).json({ error: err.message });
+    console.error("❌ APPROVE TRADE ERROR:", err);
+    const sanitized = sanitizeError(err);
+    res.status(500).json({ error: sanitized.message });
   }
 };
 

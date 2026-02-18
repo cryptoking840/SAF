@@ -12,6 +12,7 @@ const bidSchema = new mongoose.Schema(
       default: "Pending",
     },
     counterPrice: { type: Number },
+    approvedByRegistry: { type: Boolean, default: false },
     expiryAt: { type: Date },
   },
   { timestamps: true }

@@ -3,6 +3,7 @@ import {
   fetchMarketplaceListings,
   fetchMyBids,
   placeMarketplaceBid,
+  acceptMarketplaceBid,
 } from "../../api/safApi";
 
 const fallbackListings = [
@@ -153,29 +154,33 @@ export default function AirlineMarketplace() {
       return;
     }
 
-    // Use certId from the mapped listing, ensuring it's a valid number
-    const certId = selectedListing.certId ? Number(selectedListing.certId) : null;
+    // Ensure certId is a valid finite number
+    const certId = Number(selectedListing.certId);
     const quantity = Number(bidQuantity);
     const price = Number(bidPrice);
-    const availableVolume = selectedListing.volume ? Number(selectedListing.volume) : 0;
+    const availableVolume = Number(selectedListing.volume);
 
-    console.log("Submitting bid:", { certId, quantity, price, availableVolume, selectedListing });
+    console.log("Submitting bid:", { certId, quantity, price, availableVolume });
 
+    // Validate certId
     if (!Number.isFinite(certId) || certId <= 0) {
-      setError(`This listing is not ready for bidding yet (Invalid ID: ${selectedListing.certId}). Please refresh marketplace data.`);
+      setError(`Invalid certificate ID (${selectedListing.certId}). Please refresh and try again.`);
       return;
     }
 
+    // Validate quantity
     if (!Number.isFinite(quantity) || quantity <= 0) {
       setError("Please enter a valid bid quantity greater than 0.");
       return;
     }
 
-    if (Number.isFinite(availableVolume) && availableVolume > 0 && quantity > availableVolume) {
+    // Validate quantity doesn't exceed available
+    if (availableVolume > 0 && quantity > availableVolume) {
       setError(`Quantity cannot exceed available volume (${availableVolume} MT).`);
       return;
     }
 
+    // Validate price
     if (!Number.isFinite(price) || price <= 0) {
       setError("Please enter a valid bid price greater than 0.");
       return;
@@ -185,13 +190,15 @@ export default function AirlineMarketplace() {
       setSubmittingBid(true);
       console.log("Calling placeMarketplaceBid with:", { certId, quantity, price });
       
-      // Note: walletAddress would be passed here if available from context/localStorage
+      // Call API with explicit certId to ensure it's sent
       await placeMarketplaceBid({ certId, quantity, price });
       
       setSelectedListing(null);
+      setError("");
+      setBidQuantity(1);
+      setBidPrice("");
       await loadMarketplace();
       setShowMyBids(true);
-      setError("");
     } catch (err) {
       console.error("Bid submission error:", err);
       setError(err.message || "Bid submission failed");
@@ -200,54 +207,78 @@ export default function AirlineMarketplace() {
     }
   };
 
+  const handleAcceptCounter = async (bidId) => {
+    try {
+      setSubmittingBid(true);
+      console.log("Accepting counter offer for bid:", bidId);
+      
+      await acceptMarketplaceBid(bidId);
+      
+      setError("");
+      await loadMarketplace();
+      // Stay on My Bids tab to show updated status
+      setShowMyBids(true);
+    } catch (err) {
+      console.error("Error accepting counter offer:", err);
+      setError(err.message || "Failed to accept counter offer");
+    } finally {
+      setSubmittingBid(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background-light text-slate-900">
-      <main className="mx-auto flex max-w-7xl gap-6 p-6 lg:p-8">
-        <aside className="hidden w-72 shrink-0 rounded-2xl bg-white p-4 shadow-sm md:block">
-          <h2 className="px-4 pb-2 text-xl font-bold">Airline Portal</h2>
-          <nav className="mt-2 flex-1 space-y-2 px-2">
-            <NavRow
-              icon="storefront"
-              label="Marketplace"
-              active={!showMyBids}
-              onClick={() => setShowMyBids(false)}
-            />
-            <NavRow
-              icon="gavel"
-              label="My Bids"
-              pill={String(myBids.length)}
-              active={showMyBids}
-              onClick={() => setShowMyBids(true)}
-            />
-          </nav>
-        </aside>
+      <main className="mx-auto max-w-7xl p-6 lg:p-8">
+        <section className="space-y-6">
+          <header>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-3xl font-black">SAF Marketplace</h1>
+                <p className="text-sm text-slate-500 mt-1">
+                  Discover SAF listings, place bids, and track bidding lifecycle.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={loadMarketplace}
+                  disabled={loading}
+                  className="flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors"
+                >
+                  <span className="material-symbols-outlined">refresh</span>
+                  Refresh
+                </button>
+                <button
+                  onClick={() => setShowMyBids(!showMyBids)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-colors ${
+                    showMyBids
+                      ? "bg-primary text-slate-900 hover:brightness-105"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  <span className="material-symbols-outlined">gavel</span>
+                  {showMyBids ? "Back to Listings" : `My Bids (${myBids.length})`}
+                </button>
+              </div>
+            </div>
 
-        <section className="flex-1 space-y-6">
-          <header className="rounded-2xl bg-white p-5 shadow-sm">
-            <h1 className="text-2xl font-bold">SAF Marketplace</h1>
-            <p className="text-sm text-slate-500">
-              Discover SAF listings, place bids, and track bidding lifecycle.
-            </p>
-
-            <div className="mt-4">
+            <div className="rounded-2xl bg-white p-5 shadow-sm">
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search by certificate or supplier"
                 className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
               />
+              {error && (
+                <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </p>
+              )}
             </div>
-
-            {error && (
-              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </p>
-            )}
           </header>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <StatCard label="Total Listings" value={String(listings.length)} meta="Live" />
-            <StatCard label="My Bids" value={String(myBids.length)} meta="Submitted" />
+          <div className="grid gap-6 md:grid-cols-3">
+            <StatCard label="Total Listings" value={String(listings.length)} meta="Live" icon="storefront" />
+            <StatCard label="My Bids" value={String(myBids.length)} meta="Submitted" icon="gavel" />
             <StatCard
               label="Bid Conversion"
               value={`${
@@ -260,31 +291,32 @@ export default function AirlineMarketplace() {
                   : 0
               }%`}
               meta="Accepted"
+              icon="trending_up"
             />
           </div>
 
           {loading && (
-            <div className="rounded-xl border border-primary/10 bg-white p-5 text-sm text-slate-500 shadow-sm">
+            <div className="rounded-xl border border-slate-100 bg-white p-6 text-sm text-slate-500 shadow-sm">
               Loading marketplace data...
             </div>
           )}
 
           {!loading && !showMyBids && (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
               {filteredListings.map((item) => (
                 <article
                   key={item.certId}
-                  className="flex min-h-[220px] flex-col rounded-xl border border-primary/10 bg-white shadow-sm"
+                  className="flex min-h-[220px] flex-col rounded-xl border border-slate-100 bg-white shadow-sm hover:shadow-md transition-shadow"
                 >
-                  <div className="space-y-3 p-4">
+                  <div className="space-y-3 p-6">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-semibold text-slate-500">Certificate</p>
-                        <h3 className="text-lg font-bold">#{item.certId}</h3>
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Certificate</p>
+                        <h3 className="text-lg font-bold mt-1">#{item.certId}</h3>
                       </div>
                       {item.badge && (
-                        <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary">
-                          {item.badge.toUpperCase()}
+                        <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary uppercase tracking-wide">
+                          {item.badge}
                         </span>
                       )}
                     </div>
@@ -306,7 +338,7 @@ export default function AirlineMarketplace() {
                     </p>
                   </div>
 
-                  <div className="mt-auto flex items-center justify-between border-t border-slate-100 bg-slate-50/50 p-4">
+                  <div className="mt-auto flex items-center justify-between border-t border-slate-100 bg-slate-50 p-6">
                     <p
                       className={`text-xs font-bold ${
                         item.badge === "warning" ? "text-red-500" : "text-slate-500"
@@ -315,7 +347,7 @@ export default function AirlineMarketplace() {
                       {item.expiry}
                     </p>
                     <button
-                      className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-black"
+                      className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-black hover:brightness-105 transition-all"
                       onClick={() => openBidDialog(item)}
                     >
                       Place Bid
@@ -327,10 +359,10 @@ export default function AirlineMarketplace() {
           )}
 
           {!loading && showMyBids && (
-            <div className="rounded-xl border border-primary/10 bg-white shadow-sm">
-              <div className="border-b border-slate-100 p-4">
-                <h3 className="text-lg font-bold">My Bids</h3>
-                <p className="text-xs text-slate-500">
+            <div className="rounded-xl border border-slate-100 bg-white shadow-sm">
+              <div className="border-b border-slate-100 p-6">
+                <h3 className="text-lg font-bold text-slate-900">My Bids</h3>
+                <p className="text-xs text-slate-500 mt-1">
                   Bid lifecycle and current status for submitted bids.
                 </p>
               </div>
@@ -338,30 +370,69 @@ export default function AirlineMarketplace() {
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50 text-left">
                     <tr>
-                      <th className="px-4 py-3">Bid ID</th>
-                      <th className="px-4 py-3">Certificate</th>
-                      <th className="px-4 py-3">Supplier</th>
-                      <th className="px-4 py-3">Quantity</th>
-                      <th className="px-4 py-3">Price/MT</th>
-                      <th className="px-4 py-3">Status</th>
+                      <th className="px-6 py-3 font-semibold text-slate-700">Bid ID</th>
+                      <th className="px-6 py-3 font-semibold text-slate-700">Certificate</th>
+                      <th className="px-6 py-3 font-semibold text-slate-700">Supplier</th>
+                      <th className="px-6 py-3 font-semibold text-slate-700">Quantity</th>
+                      <th className="px-6 py-3 font-semibold text-slate-700">Original Price/MT</th>
+                      <th className="px-6 py-3 font-semibold text-slate-700">Current Price/MT</th>
+                      <th className="px-6 py-3 font-semibold text-slate-700">Status</th>
+                      <th className="px-6 py-3 font-semibold text-slate-700">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {myBids.map((bid) => (
-                      <tr key={bid.bidId} className="border-t border-slate-100">
-                        <td className="px-4 py-3">#{bid.bidId}</td>
-                        <td className="px-4 py-3">{bid.certificateId}</td>
-                        <td className="px-4 py-3">{bid.supplierName || bid.supplierWallet}</td>
-                        <td className="px-4 py-3">{bid.quantity}</td>
-                        <td className="px-4 py-3">
-                          ${Number(bid.bidPricePerMT || 0).toLocaleString()}
+                      <tr 
+                        key={bid.bidId} 
+                        className={`border-t border-slate-100 ${
+                          bid.status === "Countered" ? "bg-blue-50" : ""
+                        }`}
+                      >
+                        <td className="px-6 py-3">#{bid.bidId}</td>
+                        <td className="px-6 py-3">{bid.certificateId}</td>
+                        <td className="px-6 py-3">{bid.supplierName || bid.supplierWallet}</td>
+                        <td className="px-6 py-3">{bid.quantity} MT</td>
+                        <td className="px-6 py-3">
+                          ${Number(bid.originalPricePerMT || 0).toLocaleString()}
                         </td>
-                        <td className="px-4 py-3 font-semibold">{bid.status}</td>
+                        <td className="px-6 py-3 font-semibold">
+                          ${Number(bid.bidPricePerMT || 0).toLocaleString()}
+                          {bid.status === "Countered" && (
+                            <span className="ml-2 text-xs text-blue-600">(Countered)</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-3">
+                          <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${
+                            bid.approvedByRegistry ? "bg-purple-100 text-purple-700" :
+                            bid.status === "Accepted" ? "bg-green-100 text-green-700" :
+                            bid.status === "Countered" ? "bg-blue-100 text-blue-700" :
+                            bid.status === "Denied" ? "bg-red-100 text-red-700" :
+                            "bg-yellow-100 text-yellow-700"
+                          }`}>
+                            {bid.approvedByRegistry ? "Trade Approved ✓" : bid.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3">
+                          {bid.approvedByRegistry && (
+                            <span className="text-xs text-purple-600 font-semibold">✓ Trade Complete</span>
+                          )}
+                          {!bid.approvedByRegistry && bid.status === "Countered" && (
+                            <button
+                              onClick={() => handleAcceptCounter(bid.bidId)}
+                              className="text-xs font-bold text-blue-600 hover:underline"
+                            >
+                              Accept
+                            </button>
+                          )}
+                          {!bid.approvedByRegistry && bid.status === "Accepted" && (
+                            <span className="text-xs text-green-600 font-semibold">⏳ Pending Registry</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                     {myBids.length === 0 && (
                       <tr>
-                        <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                        <td className="px-6 py-6 text-center text-slate-500" colSpan={8}>
                           No bids found.
                         </td>
                       </tr>
@@ -389,17 +460,18 @@ export default function AirlineMarketplace() {
                   min="1"
                   max={selectedListing.volume}
                   value={bidQuantity}
-                  onChange={(event) => setBidQuantity(event.target.value)}
+                  onChange={(event) => setBidQuantity(Number(event.target.value) || 1)}
                   className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">Price per MT</label>
+                <label className="text-xs font-semibold text-slate-600">Price per MT ($)</label>
                 <input
                   type="number"
                   min="1"
                   value={bidPrice}
-                  onChange={(event) => setBidPrice(event.target.value)}
+                  onChange={(event) => setBidPrice(Number(event.target.value) || "")}
+                  placeholder="Enter bid price"
                   className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
                 />
               </div>
@@ -447,13 +519,16 @@ function NavRow({ icon, label, active = false, pill, onClick }) {
   );
 }
 
-function StatCard({ label, value, meta }) {
+function StatCard({ label, value, meta, icon = "storefront" }) {
   return (
-    <div className="rounded-xl border border-primary/10 bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <div className="mt-1 flex items-center gap-2">
-        <span className="text-2xl font-bold">{value}</span>
-        <span className="text-xs font-bold text-primary">{meta}</span>
+    <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden group">
+      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+        <span className="material-symbols-outlined text-6xl text-primary">{icon}</span>
+      </div>
+      <p className="text-slate-500 text-sm font-medium mb-1 uppercase tracking-wider">{label}</p>
+      <div className="flex items-baseline gap-2">
+        <h3 className="text-3xl font-black text-slate-900">{value}</h3>
+        <span className="text-slate-500 font-bold text-sm">{meta}</span>
       </div>
     </div>
   );

@@ -79,7 +79,7 @@ export default function IncomingBids() {
   }, [loadBids]);
 
   useEffect(() => {
-    const id = setInterval(loadBids, 15000);
+    const id = setInterval(loadBids, 30000); // Polling every 30 seconds
     return () => clearInterval(id);
   }, [loadBids]);
 
@@ -306,22 +306,35 @@ export default function IncomingBids() {
                 <tr><td colSpan={9} className="px-4 py-6 text-sm text-gray-500">No bids found.</td></tr>
               ) : (
                 paginated.map((bid) => {
-                  const disabled = bid.status === "Accepted" || bid.status === "Denied" || bid.status === "Expired";
+                  const disabled = bid.status === "Accepted" || bid.status === "Denied" || bid.status === "Expired" || bid.approvedByRegistry;
                   return (
-                    <tr key={bid.bidId} className="hover:bg-gray-50">
+                    <tr key={bid.bidId} className={`hover:bg-gray-50 ${bid.approvedByRegistry ? "bg-purple-50" : ""}`}>
                       <td className="px-4 py-3 font-semibold">{bid.airlineName}</td>
                       <td className="px-4 py-3">{bid.batchId}</td>
                       <td className="px-4 py-3">${Number(bid.bidPricePerMT).toLocaleString()}</td>
                       <td className="px-4 py-3">{bid.volume}</td>
                       <td className="px-4 py-3 font-bold text-primary">${Number(bid.totalValue).toLocaleString()}</td>
-                      <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${statusClassMap[bid.status] || "bg-gray-100"}`}>{bid.status}</span></td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          bid.approvedByRegistry ? "bg-purple-100 text-purple-700" :
+                          statusClassMap[bid.status] || "bg-gray-100"
+                        }`}>
+                          {bid.approvedByRegistry ? "Trade Approved ✓" : bid.status}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-sm">{formatDate(bid.bidExpiryDate)}</td>
                       <td className="px-4 py-3 text-sm">{formatDate(bid.createdTimestamp)}</td>
                       <td className="px-4 py-3">
                         <div className="flex justify-center gap-2">
-                          <button disabled={disabled} onClick={() => runAction(() => acceptMarketplaceBid(bid.bidId), bid.airlineName)} className="px-3 py-1.5 text-xs rounded bg-primary text-white disabled:bg-gray-300">Accept</button>
-                          <button disabled={disabled} onClick={() => setCounterBid(bid)} className="px-3 py-1.5 text-xs rounded border disabled:text-gray-400">Counter</button>
-                          <button disabled={disabled} onClick={() => runAction(() => denyMarketplaceBid(bid.bidId), bid.airlineName)} className="px-3 py-1.5 text-xs rounded text-red-600 disabled:text-gray-400">Deny</button>
+                          {bid.approvedByRegistry ? (
+                            <span className="text-xs text-purple-600 font-semibold">✓ Complete</span>
+                          ) : (
+                            <>
+                              <button disabled={disabled} onClick={() => runAction(() => acceptMarketplaceBid(bid.bidId), bid.airlineName)} className="px-3 py-1.5 text-xs rounded bg-primary text-white disabled:bg-gray-300">Accept</button>
+                              <button disabled={disabled} onClick={() => setCounterBid(bid)} className="px-3 py-1.5 text-xs rounded border disabled:text-gray-400">Counter</button>
+                              <button disabled={disabled} onClick={() => runAction(() => denyMarketplaceBid(bid.bidId), bid.airlineName)} className="px-3 py-1.5 text-xs rounded text-red-600 disabled:text-gray-400">Deny</button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

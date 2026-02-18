@@ -15,6 +15,13 @@ import BatchApprovals from "./pages/registry/BatchApprovals";
 import ParticipantApprovals from "./pages/registry/ParticipantApprovals";
 import IncomingBids from "./pages/IncomingBids";
 import AirlineMarketplace from "./pages/airline/AirlineMarketplace";
+import AirlineDashboard from "./pages/airline/AirlineDashboard";
+import AirlineMyBids from "./pages/airline/AirlineMyBids";
+import AirlineCertificates from "./pages/airline/AirlineCertificates";
+import AppLayout from "./layout/AppLayout";
+import InspectorLayout from "./layout/InspectorLayout";
+import RegistryLayout from "./layout/RegistryLayout";
+import AirlineLayout from "./layout/AirlineLayout";
 
 
 function App() {
@@ -35,6 +42,14 @@ function App() {
         <Route path="/certificates" element={<Certificates />} />
         <Route path="/marketplace/incoming-bids" element={<IncomingBids />} />
         <Route path="/marketplace" element={<AirlineMarketplace />} />
+
+        {/* Airline Routes with Layout */}
+        <Route path="/airline" element={<AirlineLayout />}>
+          <Route path="dashboard" element={<AirlineDashboard />} />
+          <Route path="marketplace" element={<AirlineMarketplace />} />
+          <Route path="bids" element={<AirlineMyBids />} />
+          <Route path="certificates" element={<AirlineCertificates />} />
+        </Route>
 
         {/* Inspector Routes */}
         <Route path="/inspector" element={<InspectorDashboard />} />

@@ -25,6 +25,8 @@ REGISTRY FLOW
 */
 
 router.post("/saf/approve", safController.approveSAF);
+router.get("/registry/trade-approvals", safController.getPendingTradeApprovals);
+router.post("/saf/approve-trade", safController.approveTrade);
 
 /*
 ====================================================
@@ -35,7 +37,6 @@ MARKETPLACE FLOW
 router.post("/saf/list", safController.listCertificate);
 router.post("/saf/bid", safController.placeBid);
 router.post("/saf/accept-bid", safController.acceptBid);
-router.post("/saf/approve-trade", safController.approveTrade);
 
 router.get("/marketplace/listings", safController.getMarketplaceListings);
 router.get("/marketplace/my-bids", safController.getMyBids);

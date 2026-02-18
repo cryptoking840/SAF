@@ -1,12 +1,14 @@
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 async function request(path, options = {}) {
+  const { headers: customHeaders, ...restOptions } = options;
+  
   const response = await fetch(`${BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
-      ...options.headers,
+      ...customHeaders,
     },
-    ...options,
+    ...restOptions,
   });
 
   const data = await response.json();
@@ -74,5 +76,15 @@ export const listCertificateForSale = async (certId) => {
   return request("/saf/list", {
     method: "POST",
     body: JSON.stringify({ certId }),
+  });
+};
+export const fetchPendingTradeApprovals = async () => {
+  return request("/registry/trade-approvals");
+};
+
+export const approveTrade = async (bidId) => {
+  return request("/saf/approve-trade", {
+    method: "POST",
+    body: JSON.stringify({ bidId }),
   });
 };

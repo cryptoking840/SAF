@@ -87,7 +87,7 @@ function SidebarItem({ to, label, icon }) {
         `flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition-all
         ${
           isActive
-            ? "bg-primary text-background-dark shadow-md"
+            ? "bg-primary/20 border-l-4 border-primary text-primary"
             : "text-gray-600 hover:bg-primary/10 hover:text-primary"
         }`
       }

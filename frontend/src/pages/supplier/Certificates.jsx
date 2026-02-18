@@ -55,7 +55,7 @@ export default function Certificates() {
     setLoading(true);
     fetchApprovedCertificates();
 
-    const refreshTimer = setInterval(fetchApprovedCertificates, 10000);
+    const refreshTimer = setInterval(fetchApprovedCertificates, 30000); // Polling every 30 seconds
 
     return () => clearInterval(refreshTimer);
   }, [fetchApprovedCertificates]);

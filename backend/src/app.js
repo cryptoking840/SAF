@@ -8,23 +8,46 @@ const { ethers } = require("ethers");
 
 // ===== Optional Rate Limiting =====
 let rateLimit, limiter, authLimiter;
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
 try {
   rateLimit = require("express-rate-limit");
-  limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // 100 requests per windowMs
-    message: "Too many requests from this IP, please try again later.",
-    standardHeaders: true,
-    legacyHeaders: false
-  });
+  
+  if (isDevelopment) {
+    // Relaxed limits for development
+    limiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 10000, // Very high limit for development
+      message: "Too many requests from this IP, please try again later.",
+      standardHeaders: true,
+      legacyHeaders: false
+    });
 
-  authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 10, // Stricter limits for state-changing operations
-    message: "Too many requests, please try again later.",
-    standardHeaders: true,
-    legacyHeaders: false
-  });
+    authLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 1000, // High limit for development
+      message: "Too many requests, please try again later.",
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+  } else {
+    // Strict limits for production
+    limiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 100, // 100 requests per windowMs
+      message: "Too many requests from this IP, please try again later.",
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+
+    authLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 10, // Stricter limits for state-changing operations
+      message: "Too many requests, please try again later.",
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+  }
 } catch (err) {
   // Rate limiting module not installed - use pass-through middleware
   console.warn("⚠️  express-rate-limit not installed. Install with: npm install express-rate-limit");
