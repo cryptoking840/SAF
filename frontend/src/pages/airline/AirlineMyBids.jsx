@@ -7,6 +7,8 @@ export default function AirlineMyBids() {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState('');
+  const [actingBidId, setActingBidId] = useState(null);
 
   useEffect(() => {
     fetchMyBids();
@@ -22,10 +24,50 @@ export default function AirlineMyBids() {
       if (response && response.data) {
         setBids(response.data);
       }
+      setError('');
       setLoading(false);
     } catch (error) {
       console.error('Error fetching bids:', error);
+      setError(error.message || 'Failed to fetch bids');
       setLoading(false);
+    }
+  };
+
+  const handleAcceptCounter = async (bidId) => {
+    if (!bidId) {
+      setError('Unable to accept counter offer: missing bid ID');
+      return;
+    }
+
+    try {
+      setActingBidId(bidId);
+      setError('');
+      await safApi.acceptCounterOffer(bidId);
+      await fetchMyBids();
+    } catch (err) {
+      console.error('Error accepting counter offer:', err);
+      setError(err.message || 'Failed to accept counter offer');
+    } finally {
+      setActingBidId(null);
+    }
+  };
+
+  const handleRejectCounter = async (bidId) => {
+    if (!bidId) {
+      setError('Unable to reject counter offer: missing bid ID');
+      return;
+    }
+
+    try {
+      setActingBidId(bidId);
+      setError('');
+      await safApi.denyMarketplaceBid(bidId);
+      await fetchMyBids();
+    } catch (err) {
+      console.error('Error rejecting counter offer:', err);
+      setError(err.message || 'Failed to reject counter offer');
+    } finally {
+      setActingBidId(null);
     }
   };
 
@@ -114,6 +156,11 @@ export default function AirlineMyBids() {
             </button>
           </div>
         </div>
+        {error && (
+          <p className="mt-4 text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
       </div>
 
       {/* Bids Table */}
@@ -134,12 +181,13 @@ export default function AirlineMyBids() {
                   <th className="px-6 py-4">Bid Price</th>
                   <th className="px-6 py-4">Supplier</th>
                   <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4">Action</th>
                   <th className="px-6 py-4">Created</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
                 {filteredBids.map((bid) => (
-                  <tr key={bid._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
+                  <tr key={bid._id || bid.bidId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center text-primary">
@@ -157,12 +205,14 @@ export default function AirlineMyBids() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm font-bold text-slate-900 dark:text-slate-200">
-                        ${bid.price?.toFixed(2) || '0.00'}
+                        ${Number(bid.bidPricePerMT || bid.price || 0).toFixed(2)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-slate-600 dark:text-slate-400">
-                        {bid.supplierWallet?.substring(0, 6)}...{bid.supplierWallet?.substring(-4)}
+                        {bid.supplierWallet
+                          ? `${bid.supplierWallet.substring(0, 6)}...${bid.supplierWallet.slice(-4)}`
+                          : '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -175,8 +225,32 @@ export default function AirlineMyBids() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
+                      {!bid.approvedByRegistry && bid.status === 'Countered' ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleAcceptCounter(bid.bidId)}
+                            disabled={actingBidId === bid.bidId}
+                            className="px-3 py-1.5 text-xs font-bold rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 disabled:opacity-50"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => handleRejectCounter(bid.bidId)}
+                            disabled={actingBidId === bid.bidId}
+                            className="px-3 py-1.5 text-xs font-bold rounded bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
                       <span className="text-sm text-slate-500">
-                        {bid.createdAt ? new Date(bid.createdAt).toLocaleDateString() : '-'}
+                        {bid.submittedAt || bid.createdAt
+                          ? new Date(bid.submittedAt || bid.createdAt).toLocaleDateString()
+                          : '-'}
                       </span>
                     </td>
                   </tr>

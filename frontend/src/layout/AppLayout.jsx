@@ -1,6 +1,13 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 
 export default function AppLayout({ children }) {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("saf_auth");
+    navigate("/login", { replace: true });
+  };
+
   return (
     <div className="flex h-screen w-full overflow-hidden">
 
@@ -43,12 +50,20 @@ export default function AppLayout({ children }) {
             icon="fact_check"
           />
 
-          <div className="mt-auto">
+          <div className="mt-auto space-y-2">
             <SidebarItem
               to="/settings"
               label="Settings"
               icon="settings"
             />
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition-all text-red-600 hover:bg-red-50"
+            >
+              <span className="material-symbols-outlined">logout</span>
+              <span>Logout</span>
+            </button>
           </div>
 
         </nav>

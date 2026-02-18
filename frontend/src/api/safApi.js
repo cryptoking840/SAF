@@ -27,6 +27,37 @@ export const registerSAF = async (payload) => {
   });
 };
 
+export const registerOrganization = async (payload) => {
+  return request("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+};
+
+export const loginOrganization = async (payload) => {
+  return request("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+};
+
+export const fetchParticipantRegistrations = async (status) => {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request(`/registry/participants${query}`);
+};
+
+export const approveParticipantRegistration = async (id) => {
+  return request(`/registry/participants/${id}/approve`, {
+    method: "POST",
+  });
+};
+
+export const rejectParticipantRegistration = async (id) => {
+  return request(`/registry/participants/${id}/reject`, {
+    method: "POST",
+  });
+};
+
 export const fetchMarketplaceListings = async () => {
   return request("/marketplace/listings");
 };
@@ -53,6 +84,13 @@ export const fetchIncomingBids = async (walletAddress) => {
 
 export const acceptMarketplaceBid = async (bidId) => {
   return request("/marketplace/bid/accept", {
+    method: "POST",
+    body: JSON.stringify({ bidId }),
+  });
+};
+
+export const acceptCounterOffer = async (bidId) => {
+  return request("/marketplace/bid/accept-counter", {
     method: "POST",
     body: JSON.stringify({ bidId }),
   });

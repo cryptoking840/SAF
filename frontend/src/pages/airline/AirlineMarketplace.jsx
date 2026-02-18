@@ -4,6 +4,7 @@ import {
   fetchMyBids,
   placeMarketplaceBid,
   acceptMarketplaceBid,
+  acceptCounterOffer,
 } from "../../api/safApi";
 
 const fallbackListings = [
@@ -212,7 +213,7 @@ export default function AirlineMarketplace() {
       setSubmittingBid(true);
       console.log("Accepting counter offer for bid:", bidId);
       
-      await acceptMarketplaceBid(bidId);
+      await acceptCounterOffer(bidId);
       
       setError("");
       await loadMarketplace();
@@ -227,82 +228,81 @@ export default function AirlineMarketplace() {
   };
 
   return (
-    <div className="min-h-screen bg-background-light text-slate-900">
-      <main className="mx-auto max-w-7xl p-6 lg:p-8">
-        <section className="space-y-6">
-          <header>
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h1 className="text-3xl font-black">SAF Marketplace</h1>
-                <p className="text-sm text-slate-500 mt-1">
-                  Discover SAF listings, place bids, and track bidding lifecycle.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={loadMarketplace}
-                  disabled={loading}
-                  className="flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors"
-                >
-                  <span className="material-symbols-outlined">refresh</span>
-                  Refresh
-                </button>
-                <button
-                  onClick={() => setShowMyBids(!showMyBids)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-colors ${
-                    showMyBids
-                      ? "bg-primary text-slate-900 hover:brightness-105"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  <span className="material-symbols-outlined">gavel</span>
-                  {showMyBids ? "Back to Listings" : `My Bids (${myBids.length})`}
-                </button>
-              </div>
-            </div>
+    <div className="w-full p-8 bg-background-light min-h-screen overflow-auto">
+      <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white p-8 rounded-xl border shadow-sm mb-8">
+        <div>
+          <h1 className="text-4xl font-black">SAF Marketplace</h1>
+          <p className="text-slate-600 mt-2 max-w-xl">
+            Discover SAF listings, place bids, and track bidding lifecycle.
+          </p>
+        </div>
 
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by certificate or supplier"
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-              />
-              {error && (
-                <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {error}
-                </p>
-              )}
-            </div>
-          </header>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={loadMarketplace}
+            disabled={loading}
+            className="flex items-center gap-2 rounded-lg bg-primary/10 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors"
+          >
+            <span className="material-symbols-outlined">refresh</span>
+            Refresh
+          </button>
+          <button
+            onClick={() => setShowMyBids(!showMyBids)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-colors ${
+              showMyBids
+                ? "bg-primary text-slate-900 hover:brightness-105"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            }`}
+          >
+            <span className="material-symbols-outlined">gavel</span>
+            {showMyBids ? "Back to Listings" : `My Bids (${myBids.length})`}
+          </button>
+        </div>
+      </section>
 
-          <div className="grid gap-6 md:grid-cols-3">
-            <StatCard label="Total Listings" value={String(listings.length)} meta="Live" icon="storefront" />
-            <StatCard label="My Bids" value={String(myBids.length)} meta="Submitted" icon="gavel" />
-            <StatCard
-              label="Bid Conversion"
-              value={`${
-                myBids.length
-                  ? Math.round(
-                      (myBids.filter((item) => item.status === "Accepted").length /
-                        myBids.length) *
-                        100
-                    )
-                  : 0
-              }%`}
-              meta="Accepted"
-              icon="trending_up"
-            />
-          </div>
-
-          {loading && (
-            <div className="rounded-xl border border-slate-100 bg-white p-6 text-sm text-slate-500 shadow-sm">
-              Loading marketplace data...
-            </div>
+      <div className="mb-8">
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-100 mb-6">
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by certificate or supplier"
+            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+          />
+          {error && (
+            <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
           )}
+        </div>
 
-          {!loading && !showMyBids && (
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-3">
+          <StatCard label="Total Listings" value={String(listings.length)} meta="Live" icon="storefront" />
+          <StatCard label="My Bids" value={String(myBids.length)} meta="Submitted" icon="gavel" />
+          <StatCard
+            label="Bid Conversion"
+            value={`${
+              myBids.length
+                ? Math.round(
+                    (myBids.filter((item) => item.status === "Accepted").length /
+                      myBids.length) *
+                      100
+                  )
+                : 0
+            }%`}
+            meta="Accepted"
+            icon="trending_up"
+          />
+        </div>
+      </div>
+
+      {loading && (
+        <div className="rounded-xl border border-slate-100 bg-white p-6 text-sm text-slate-500 shadow-sm">
+          Loading marketplace data...
+        </div>
+      )}
+
+      {!loading && !showMyBids && (
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
               {filteredListings.map((item) => (
                 <article
                   key={item.certId}
@@ -407,25 +407,38 @@ export default function AirlineMarketplace() {
                             bid.status === "Accepted" ? "bg-green-100 text-green-700" :
                             bid.status === "Countered" ? "bg-blue-100 text-blue-700" :
                             bid.status === "Denied" ? "bg-red-100 text-red-700" :
-                            "bg-yellow-100 text-yellow-700"
+                            bid.status === "Pending" ? "bg-yellow-100 text-yellow-700" :
+                            "bg-slate-100 text-slate-700"
                           }`}>
                             {bid.approvedByRegistry ? "Trade Approved ✓" : bid.status}
                           </span>
                         </td>
-                        <td className="px-6 py-3">
+                        <td className="px-6 py-3 text-xs text-slate-600">
                           {bid.approvedByRegistry && (
-                            <span className="text-xs text-purple-600 font-semibold">✓ Trade Complete</span>
+                            <span className="text-purple-600 font-semibold">✓ Ready to Receive Certificate</span>
                           )}
-                          {!bid.approvedByRegistry && bid.status === "Countered" && (
-                            <button
-                              onClick={() => handleAcceptCounter(bid.bidId)}
-                              className="text-xs font-bold text-blue-600 hover:underline"
-                            >
-                              Accept
-                            </button>
+                          {!bid.approvedByRegistry && bid.status === "Pending" && (
+                            <span className="text-yellow-600 font-semibold">⏳ Awaiting Supplier Response</span>
                           )}
                           {!bid.approvedByRegistry && bid.status === "Accepted" && (
-                            <span className="text-xs text-green-600 font-semibold">⏳ Pending Registry</span>
+                            <span className="text-green-600 font-semibold">📋 Pending Registry Approval</span>
+                          )}
+                          {!bid.approvedByRegistry && bid.status === "Countered" && (
+                            <div className="flex flex-col gap-2">
+                              <div className="text-xs text-blue-600 font-semibold">
+                                Counter: ${Number(bid.bidPricePerMT || 0).toLocaleString()}/MT
+                              </div>
+                              <button
+                                onClick={() => handleAcceptCounter(bid.bidId)}
+                                disabled={submittingBid}
+                                className="text-xs font-bold text-blue-600 hover:underline disabled:opacity-50"
+                              >
+                                Accept Counter Offer
+                              </button>
+                            </div>
+                          )}
+                          {bid.status === "Denied" && (
+                            <span className="text-red-600 font-semibold">❌ Rejected by Supplier</span>
                           )}
                         </td>
                       </tr>
@@ -442,50 +455,48 @@ export default function AirlineMarketplace() {
               </div>
             </div>
           )}
-        </section>
-      </main>
 
       {selectedListing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-lg">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
             <h3 className="text-lg font-bold">Place Bid</h3>
             <p className="mt-1 text-sm text-slate-500">Cert ID: {selectedListing.certId}</p>
             <p className="text-sm text-slate-500">Supplier: {selectedListing.supplier}</p>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-6 space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-600">Quantity (MT)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Quantity (MT)</label>
                 <input
                   type="number"
                   min="1"
                   max={selectedListing.volume}
                   value={bidQuantity}
                   onChange={(event) => setBidQuantity(Number(event.target.value) || 1)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">Price per MT ($)</label>
+                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Price per MT ($)</label>
                 <input
                   type="number"
                   min="1"
                   value={bidPrice}
                   onChange={(event) => setBidPrice(Number(event.target.value) || "")}
                   placeholder="Enter bid price"
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
                 />
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-2">
               <button
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold"
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 transition-colors"
                 onClick={() => setSelectedListing(null)}
               >
                 Cancel
               </button>
               <button
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-black"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-black hover:brightness-105 transition-all"
                 onClick={submitBid}
                 disabled={submittingBid}
               >

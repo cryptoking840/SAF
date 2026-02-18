@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const safRoutes = require("./routes/safRoutes");
+const authRoutes = require("./routes/authRoutes");
 const { ethers } = require("ethers");
 
 // ===== Optional Rate Limiting =====
@@ -117,6 +118,7 @@ app.get("/", (req, res) => {
 
 // API Routes (with auth middleware on state-changing operations)
 app.use("/api", safRoutes);
+app.use("/api", authRoutes);
 
 // ===== 404 Handler =====
 app.use((req, res) => {

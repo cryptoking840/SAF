@@ -1,6 +1,13 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 
 export default function InspectorLayout({ children }) {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("saf_auth");
+    navigate("/login", { replace: true });
+  };
+
   return (
     <div className="flex min-h-screen bg-background-light">
 
@@ -45,6 +52,17 @@ export default function InspectorLayout({ children }) {
           />
 
         </nav>
+
+        <div className="mt-auto p-4 border-t border-primary/10">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-red-600 border border-red-200 hover:bg-red-50 transition"
+          >
+            <span className="material-symbols-outlined text-base">logout</span>
+            Logout
+          </button>
+        </div>
 
       </aside>
 

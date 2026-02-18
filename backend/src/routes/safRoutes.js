@@ -42,6 +42,7 @@ router.get("/marketplace/listings", safController.getMarketplaceListings);
 router.get("/marketplace/my-bids", safController.getMyBids);
 router.get("/marketplace/incoming-bids", safController.getIncomingBids);
 router.post("/marketplace/bid/accept", safController.acceptBid);
+router.post("/marketplace/bid/accept-counter", safController.acceptCounterBid);
 router.post("/marketplace/bid/counter", safController.counterBid);
 router.post("/marketplace/bid/deny", safController.denyBid);
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 const SidebarItem = ({ to, icon, label, isActive }) => {
   return (
@@ -20,7 +20,14 @@ const SidebarItem = ({ to, icon, label, isActive }) => {
 };
 
 export default function AirlineLayout() {
+  const navigate = useNavigate();
   const airlineName = localStorage.getItem('airlineName') || 'SkyBlue Airways';
+
+  const handleLogout = () => {
+    localStorage.removeItem("saf_auth");
+    localStorage.removeItem("airlineName");
+    navigate("/login", { replace: true });
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background-light dark:bg-background-dark">
@@ -63,6 +70,14 @@ export default function AirlineLayout() {
               <p className="text-xs text-slate-500 truncate">Admin Account</p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-red-600 border border-red-200 hover:bg-red-50 transition"
+          >
+            <span className="material-symbols-outlined text-base">logout</span>
+            Logout
+          </button>
         </div>
       </aside>
 

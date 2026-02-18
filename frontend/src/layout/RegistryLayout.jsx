@@ -1,6 +1,13 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 
 export default function RegistryLayout({ children }) {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("saf_auth");
+    navigate("/login", { replace: true });
+  };
+
   return (
     <div className="flex h-screen w-full overflow-hidden">
 
@@ -55,6 +62,17 @@ export default function RegistryLayout({ children }) {
           />
 
         </nav>
+
+        <div className="p-4 border-t border-gray-200">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-red-600 border border-red-200 hover:bg-red-50 transition"
+          >
+            <span className="material-symbols-outlined text-base">logout</span>
+            Logout
+          </button>
+        </div>
 
       </aside>
 

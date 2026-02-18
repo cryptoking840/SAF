@@ -7,10 +7,12 @@ const DEFAULT_BID_EXPIRY_HOURS = Number(process.env.DEFAULT_BID_EXPIRY_HOURS || 
 
 // ===== Error Sanitization Helper =====
 const sanitizeError = (err) => {
-  const isDevelopment = process.env.NODE_ENV === 'development';
+  const isProduction = process.env.NODE_ENV === "production";
   return {
-    message: isDevelopment ? err.message : 'Operation failed. Please try again.',
-    reason: isDevelopment ? (err.reason || err.shortMessage) : undefined
+    message: isProduction
+      ? "Operation failed. Please try again."
+      : (err.reason || err.shortMessage || err.message),
+    reason: isProduction ? undefined : (err.reason || err.shortMessage),
   };
 };
 
@@ -545,6 +547,81 @@ exports.counterBid = async (req, res) => {
     });
   } catch (err) {
     console.error("COUNTER BID ERROR:", err);
+    const sanitized = sanitizeError(err);
+    res.status(500).json({ error: sanitized.message });
+  }
+};
+
+/*
+====================================================
+ACCEPT COUNTER BID (Airline Only)
+====================================================
+*/
+exports.acceptCounterBid = async (req, res) => {
+  try {
+    const { bidId } = req.body;
+
+    if (!bidId) {
+      return res.status(400).json({ error: "bidId is required" });
+    }
+
+    const bidDoc = await Bid.findOne({ bidId: Number(bidId) });
+
+    if (!bidDoc) {
+      return res.status(404).json({ error: "Bid not found" });
+    }
+
+    if (bidDoc.status !== "Countered") {
+      return res.status(400).json({ error: "Bid must be in 'Countered' status to accept counter offer" });
+    }
+
+    if (bidDoc.expiryAt && bidDoc.expiryAt <= new Date()) {
+      return res.status(400).json({ error: "Counter offer has expired" });
+    }
+
+    const blockchainBid = await contract.bids(bidId);
+    if (Number(blockchainBid.id) === 0) {
+      return res.status(404).json({ error: "Bid not found on-chain" });
+    }
+
+    const certificateId = Number(bidDoc.certificateId || blockchainBid.certificateId);
+    if (!certificateId) {
+      return res.status(400).json({ error: "Cannot resolve certificate for this bid" });
+    }
+
+    let txHash = null;
+    if (!blockchainBid.accepted) {
+      // On-chain acceptBid is supplier-only; use the supplier signer for this certificate.
+      const supplierSigner = await getSupplierSignerForCertificate(certificateId, req);
+      const supplierContract = contract.connect(supplierSigner);
+      const tx = await supplierContract.acceptBid(bidId);
+      await tx.wait();
+      txHash = tx.hash;
+    }
+
+    // Update bid document to reflect acceptance
+    const updated = await Bid.findOneAndUpdate(
+      { bidId: Number(bidId) },
+      {
+        status: "Accepted",
+        // Keep the counterPrice as the final agreed price
+      },
+      { new: true }
+    );
+
+    console.log(`✅ Counter offer accepted: bidId=${bidId}`);
+
+    res.json({
+      message: "Counter Offer Accepted",
+      data: {
+        bidId: updated.bidId,
+        status: updated.status,
+        finalPrice: updated.counterPrice,
+        txHash,
+      },
+    });
+  } catch (err) {
+    console.error("ACCEPT COUNTER BID ERROR:", err);
     const sanitized = sanitizeError(err);
     res.status(500).json({ error: sanitized.message });
   }

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Login from "./pages/auth/Login";
 import InspectionQueue from "./pages/inspector/InspectionQueue";
 import InspectorAnalytics from "./pages/inspector/InspectorAnalytics";
@@ -18,58 +18,192 @@ import AirlineMarketplace from "./pages/airline/AirlineMarketplace";
 import AirlineDashboard from "./pages/airline/AirlineDashboard";
 import AirlineMyBids from "./pages/airline/AirlineMyBids";
 import AirlineCertificates from "./pages/airline/AirlineCertificates";
-import AppLayout from "./layout/AppLayout";
-import InspectorLayout from "./layout/InspectorLayout";
-import RegistryLayout from "./layout/RegistryLayout";
 import AirlineLayout from "./layout/AirlineLayout";
 
+const routeByOrgType = {
+  supplier: "/dashboard",
+  airline: "/airline/dashboard",
+  trader: "/registry",
+  inspector: "/inspector",
+  registry: "/registry",
+};
+
+function getAuth() {
+  try {
+    return JSON.parse(localStorage.getItem("saf_auth") || "null");
+  } catch (_err) {
+    return null;
+  }
+}
+
+function ProtectedRoute({ allowedRoles, children }) {
+  const auth = getAuth();
+  const role = auth?.organizationType;
+
+  if (!auth || !role) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!allowedRoles.includes(role)) {
+    return <Navigate to={routeByOrgType[role] || "/login"} replace />;
+  }
+
+  return children;
+}
+
+function LoginRoute() {
+  const auth = getAuth();
+  if (auth?.organizationType) {
+    return <Navigate to={routeByOrgType[auth.organizationType] || "/login"} replace />;
+  }
+  return <Login />;
+}
 
 function App() {
   return (
     <BrowserRouter>
-      
       <Routes>
+        <Route path="/login" element={<LoginRoute />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* Authentication Route */}
-        <Route path="/login" element={<Login />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={["supplier"]}>
+              <SupplierDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/batches"
+          element={
+            <ProtectedRoute allowedRoles={["supplier"]}>
+              <BatchManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/certificates"
+          element={
+            <ProtectedRoute allowedRoles={["supplier"]}>
+              <Certificates />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            <ProtectedRoute allowedRoles={["supplier"]}>
+              <RegisterSAF />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/marketplace/incoming-bids"
+          element={
+            <ProtectedRoute allowedRoles={["supplier"]}>
+              <IncomingBids />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/marketplace"
+          element={
+            <ProtectedRoute allowedRoles={["supplier"]}>
+              <AirlineMarketplace />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Default Redirect */}
-        <Route path="/" element={<Navigate to="/login" />} />
-
-        {/* Supplier Routes */}
-        <Route path="/dashboard" element={<SupplierDashboard />} />
-        <Route path="/batches" element={<BatchManagement />} />
-        <Route path="/certificates" element={<Certificates />} />
-        <Route path="/marketplace/incoming-bids" element={<IncomingBids />} />
-        <Route path="/marketplace" element={<AirlineMarketplace />} />
-
-        {/* Airline Routes with Layout */}
-        <Route path="/airline" element={<AirlineLayout />}>
+        <Route
+          path="/airline"
+          element={
+            <ProtectedRoute allowedRoles={["airline"]}>
+              <AirlineLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route path="dashboard" element={<AirlineDashboard />} />
           <Route path="marketplace" element={<AirlineMarketplace />} />
           <Route path="bids" element={<AirlineMyBids />} />
           <Route path="certificates" element={<AirlineCertificates />} />
         </Route>
 
-        {/* Inspector Routes */}
-        <Route path="/inspector" element={<InspectorDashboard />} />
-        <Route path="/inspection/queue" element={<InspectionQueue />} />
-        <Route path="/inspector/analytics" element={<InspectorAnalytics />} />
+        <Route
+          path="/inspector"
+          element={
+            <ProtectedRoute allowedRoles={["inspector"]}>
+              <InspectorDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inspection/queue"
+          element={
+            <ProtectedRoute allowedRoles={["inspector"]}>
+              <InspectionQueue />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inspector/analytics"
+          element={
+            <ProtectedRoute allowedRoles={["inspector"]}>
+              <InspectorAnalytics />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Registry Routes */}
-        <Route path="/registry/audit-log" element={<RegistryAuditLog />} /> 
-        <Route path="/registry/trade-approvals" element={<TradeApprovals />} />
-        <Route path="/registry/retirements" element={<RetirementApprovals />} />
-        <Route path="/registry/batch-approvals" element={<BatchApprovals />} />
-        <Route path="/registry/participants" element={<ParticipantApprovals />} />
-        <Route path="/registry" element={<RegistryDashboard />} />
+        <Route
+          path="/registry"
+          element={
+            <ProtectedRoute allowedRoles={["registry", "trader"]}>
+              <RegistryDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/registry/audit-log"
+          element={
+            <ProtectedRoute allowedRoles={["registry", "trader"]}>
+              <RegistryAuditLog />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/registry/trade-approvals"
+          element={
+            <ProtectedRoute allowedRoles={["registry", "trader"]}>
+              <TradeApprovals />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/registry/retirements"
+          element={
+            <ProtectedRoute allowedRoles={["registry", "trader"]}>
+              <RetirementApprovals />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/registry/batch-approvals"
+          element={
+            <ProtectedRoute allowedRoles={["registry", "trader"]}>
+              <BatchApprovals />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/registry/participants"
+          element={
+            <ProtectedRoute allowedRoles={["registry", "trader"]}>
+              <ParticipantApprovals />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Optional: direct register page (if needed) */}
-        <Route path="/register" element={<RegisterSAF />} />
-
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/dashboard" />} />
-
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );
