@@ -29,6 +29,65 @@ const safSchema = new mongoose.Schema(
       type: String,
       default: "HEFA-SPK",
     },
+    producer: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    blendingRatio: {
+      type: Number,
+      required: true,
+    },
+    productionLocationCity: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    productionLocationState: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    productionLocationCountry: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    productionLocationPincode: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    soNumber: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    buyer: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    deliveryCountry: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    deliveryState: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    deliveryCity: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    deliveryZipcode: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     supplierWallet: {
       type: String,
       required: true,

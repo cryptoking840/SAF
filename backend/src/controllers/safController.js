@@ -99,6 +99,150 @@ const normalizeBidState = (bidDoc, blockchainBid) => {
   return baseStatus;
 };
 
+const FIELD_PATTERNS = {
+  producer: /^[a-zA-Z0-9 ]+$/,
+  decimalNumber: /^\d+(\.\d+)?$/,
+  alphaOnly: /^[a-zA-Z ]+$/,
+  pincodeNumeric: /^\d+$/,
+  soNumber: /^[a-zA-Z0-9]+$/,
+  zipcodeAlphaNumeric: /^[a-zA-Z0-9 ]+$/,
+};
+
+const normalizeText = (value) => String(value || "").trim().replace(/\s+/g, " ");
+const hasScriptLikeInput = (value) => /<|>|script|javascript:/i.test(String(value || ""));
+
+const validateAndNormalizeBatchPayload = (payload) => {
+  const normalized = {
+    productionBatchId: normalizeText(payload.productionBatchId),
+    productionDate: normalizeText(payload.productionDate),
+    producer: normalizeText(payload.producer),
+    blendingRatio: normalizeText(payload.blendingRatio),
+    feedstockType: normalizeText(payload.feedstockType),
+    productionPathway: normalizeText(payload.productionPathway),
+    productionLocationCity: normalizeText(payload.productionLocationCity),
+    productionLocationState: normalizeText(payload.productionLocationState),
+    productionLocationCountry: normalizeText(payload.productionLocationCountry),
+    productionLocationPincode: normalizeText(payload.productionLocationPincode),
+    soNumber: normalizeText(payload.soNumber),
+    buyer: normalizeText(payload.buyer),
+    quantity: normalizeText(payload.quantity),
+    deliveryCountry: normalizeText(payload.deliveryCountry),
+    deliveryState: normalizeText(payload.deliveryState),
+    deliveryCity: normalizeText(payload.deliveryCity),
+    deliveryZipcode: normalizeText(payload.deliveryZipcode),
+  };
+
+  const requiredFields = Object.entries(normalized);
+  const emptyFields = requiredFields.filter(([, value]) => !value).map(([key]) => key);
+  if (emptyFields.length > 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: "All fields are mandatory.",
+      fieldErrors: emptyFields.reduce((acc, key) => {
+        acc[key] = "This field is required.";
+        return acc;
+      }, {}),
+    };
+  }
+
+  const maxLength = 100;
+  for (const [key, value] of requiredFields) {
+    if (value.length > maxLength) {
+      return {
+        ok: false,
+        status: 400,
+        error: `${key} exceeds max length (${maxLength}).`,
+        fieldErrors: { [key]: `Maximum length is ${maxLength} characters.` },
+      };
+    }
+    if (hasScriptLikeInput(value)) {
+      return {
+        ok: false,
+        status: 400,
+        error: `${key} contains unsafe input.`,
+        fieldErrors: { [key]: "Invalid characters detected." },
+      };
+    }
+  }
+
+  if (!FIELD_PATTERNS.producer.test(normalized.producer)) {
+    return { ok: false, status: 400, error: "Invalid SAF Producer format", fieldErrors: { producer: "SAF Producer must be alphanumeric only." } };
+  }
+
+  if (!FIELD_PATTERNS.decimalNumber.test(normalized.blendingRatio) || Number(normalized.blendingRatio) <= 0) {
+    return { ok: false, status: 400, error: "Invalid Blending Ratio format", fieldErrors: { blendingRatio: "Blending ratio must be numeric and greater than 0." } };
+  }
+
+  if (!FIELD_PATTERNS.alphaOnly.test(normalized.feedstockType)) {
+    return { ok: false, status: 400, error: "Invalid Feedstock format", fieldErrors: { feedstockType: "Feedstock must contain only letters." } };
+  }
+
+  if (!FIELD_PATTERNS.alphaOnly.test(normalized.productionPathway)) {
+    return { ok: false, status: 400, error: "Invalid SAF Pathway format", fieldErrors: { productionPathway: "SAF Pathway must contain only letters." } };
+  }
+
+  if (!FIELD_PATTERNS.alphaOnly.test(normalized.productionLocationCity)) {
+    return { ok: false, status: 400, error: "Invalid Production City format", fieldErrors: { productionLocationCity: "City must contain only letters." } };
+  }
+
+  if (!FIELD_PATTERNS.alphaOnly.test(normalized.productionLocationState)) {
+    return { ok: false, status: 400, error: "Invalid Production State format", fieldErrors: { productionLocationState: "State must contain only letters." } };
+  }
+
+  if (!FIELD_PATTERNS.alphaOnly.test(normalized.productionLocationCountry)) {
+    return { ok: false, status: 400, error: "Invalid Production Country format", fieldErrors: { productionLocationCountry: "Country must contain only letters." } };
+  }
+
+  if (!FIELD_PATTERNS.pincodeNumeric.test(normalized.productionLocationPincode)) {
+    return { ok: false, status: 400, error: "Invalid Pincode format", fieldErrors: { productionLocationPincode: "Pincode must be numeric only." } };
+  }
+
+  if (!FIELD_PATTERNS.soNumber.test(normalized.soNumber)) {
+    return { ok: false, status: 400, error: "Invalid SO Number format", fieldErrors: { soNumber: "SO Number must be alphanumeric with no special characters." } };
+  }
+
+  if (!FIELD_PATTERNS.alphaOnly.test(normalized.buyer)) {
+    return { ok: false, status: 400, error: "Invalid Buyer format", fieldErrors: { buyer: "Buyer must contain only letters." } };
+  }
+
+  if (!FIELD_PATTERNS.decimalNumber.test(normalized.quantity) || Number(normalized.quantity) <= 0) {
+    return { ok: false, status: 400, error: "Invalid Quantity format", fieldErrors: { quantity: "Quantity must be numeric and greater than 0." } };
+  }
+
+  if (!FIELD_PATTERNS.alphaOnly.test(normalized.deliveryCountry)) {
+    return { ok: false, status: 400, error: "Invalid Delivery Country format", fieldErrors: { deliveryCountry: "Country must contain only letters." } };
+  }
+
+  if (!FIELD_PATTERNS.alphaOnly.test(normalized.deliveryState)) {
+    return { ok: false, status: 400, error: "Invalid Delivery State format", fieldErrors: { deliveryState: "State must contain only letters." } };
+  }
+
+  if (!FIELD_PATTERNS.alphaOnly.test(normalized.deliveryCity)) {
+    return { ok: false, status: 400, error: "Invalid Delivery City format", fieldErrors: { deliveryCity: "City must contain only letters." } };
+  }
+
+  if (!FIELD_PATTERNS.zipcodeAlphaNumeric.test(normalized.deliveryZipcode)) {
+    return { ok: false, status: 400, error: "Invalid Delivery Zipcode format", fieldErrors: { deliveryZipcode: "Zipcode must be alphanumeric." } };
+  }
+
+  const parsedDate = new Date(normalized.productionDate);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { ok: false, status: 400, error: "Invalid productionDate format", fieldErrors: { productionDate: "Invalid date." } };
+  }
+
+  return {
+    ok: true,
+    data: {
+      ...normalized,
+      quantity: Number(normalized.quantity),
+      carbonIntensity: Number(normalized.blendingRatio),
+      blendingRatio: Number(normalized.blendingRatio),
+      productionDate: parsedDate,
+    },
+  };
+};
+
 /*
 ====================================================
 HELPER: Get Role-Based Wallet
@@ -166,18 +310,34 @@ SUPPLIER: Submit SAF (Mongo Only)
 */
 exports.registerSAF = async (req, res) => {
   try {
+    const validation = validateAndNormalizeBatchPayload(req.body || {});
+    if (!validation.ok) {
+      return res.status(validation.status || 400).json({
+        error: validation.error,
+        fieldErrors: validation.fieldErrors || {},
+      });
+    }
+
     const {
       productionBatchId,
       productionDate,
+      producer,
+      blendingRatio,
       quantity,
       feedstockType,
       carbonIntensity,
-      productionPathway
-    } = req.body;
-
-    if (!quantity || !productionBatchId) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
+      productionPathway,
+      productionLocationCity,
+      productionLocationState,
+      productionLocationCountry,
+      productionLocationPincode,
+      soNumber,
+      buyer,
+      deliveryCountry,
+      deliveryState,
+      deliveryCity,
+      deliveryZipcode,
+    } = validation.data;
 
     const supplierWallet = process.env.SUPPLIER_ADDRESS;
     if (!supplierWallet || !ethers.isAddress(supplierWallet)) {
@@ -187,10 +347,22 @@ exports.registerSAF = async (req, res) => {
     const safDoc = await SAF.create({
       productionBatchId,
       productionDate,
+      producer,
+      blendingRatio,
       quantity,
       feedstockType,
       carbonIntensity,
       productionPathway,
+      productionLocationCity,
+      productionLocationState,
+      productionLocationCountry,
+      productionLocationPincode,
+      soNumber,
+      buyer,
+      deliveryCountry,
+      deliveryState,
+      deliveryCity,
+      deliveryZipcode,
       supplierWallet: supplierWallet.toLowerCase(),
       status: "SUBMITTED"
     });

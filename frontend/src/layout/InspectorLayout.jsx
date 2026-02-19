@@ -2,6 +2,15 @@ import { NavLink, useNavigate } from "react-router-dom";
 
 export default function InspectorLayout({ children }) {
   const navigate = useNavigate();
+  let authUser = null;
+  try {
+    authUser = JSON.parse(localStorage.getItem("saf_auth") || "null");
+  } catch (_err) {
+    authUser = null;
+  }
+
+  const displayName = authUser?.organizationName || "Inspector User";
+  const displayEmail = authUser?.officialEmail || "Inspector Account";
 
   const handleLogout = () => {
     localStorage.removeItem("saf_auth");
@@ -53,7 +62,14 @@ export default function InspectorLayout({ children }) {
 
         </nav>
 
-        <div className="mt-auto p-4 border-t border-primary/10">
+        <div className="mt-auto p-4 border-t border-primary/10 space-y-3">
+          <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 border border-gray-100">
+            <span className="material-symbols-outlined text-gray-500">account_circle</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-800 truncate">{displayName}</p>
+              <p className="text-xs text-gray-500 truncate">{displayEmail}</p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={handleLogout}

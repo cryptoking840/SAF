@@ -2,6 +2,14 @@ import { NavLink, useNavigate } from "react-router-dom";
 
 export default function AppLayout({ children }) {
   const navigate = useNavigate();
+  let authUser = null;
+  try {
+    authUser = JSON.parse(localStorage.getItem("saf_auth") || "null");
+  } catch (_err) {
+    authUser = null;
+  }
+
+  const displayName = authUser?.organizationName || "Participant User";
 
   const handleLogout = () => {
     localStorage.removeItem("saf_auth");
@@ -80,7 +88,7 @@ export default function AppLayout({ children }) {
 
           <div className="flex items-center gap-4">
             <button className="hidden sm:flex rounded-lg h-10 px-4 bg-primary/10 font-bold">
-              EcoJet Fuels Inc.
+              {displayName}
             </button>
           </div>
         </header>

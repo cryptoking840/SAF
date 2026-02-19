@@ -21,7 +21,15 @@ const SidebarItem = ({ to, icon, label, isActive }) => {
 
 export default function AirlineLayout() {
   const navigate = useNavigate();
-  const airlineName = localStorage.getItem('airlineName') || 'SkyBlue Airways';
+  let authUser = null;
+  try {
+    authUser = JSON.parse(localStorage.getItem("saf_auth") || "null");
+  } catch (_err) {
+    authUser = null;
+  }
+
+  const airlineName = authUser?.organizationName || localStorage.getItem('airlineName') || 'Airline User';
+  const airlineIdentity = authUser?.officialEmail || "Admin Account";
 
   const handleLogout = () => {
     localStorage.removeItem("saf_auth");
@@ -67,7 +75,7 @@ export default function AirlineLayout() {
             />
             <div className="overflow-hidden">
               <p className="text-sm font-semibold truncate">{airlineName}</p>
-              <p className="text-xs text-slate-500 truncate">Admin Account</p>
+              <p className="text-xs text-slate-500 truncate">{airlineIdentity}</p>
             </div>
           </div>
           <button
